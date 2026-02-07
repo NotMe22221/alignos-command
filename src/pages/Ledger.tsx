@@ -7,10 +7,11 @@ import {
   ChevronRight,
   Clock,
   Users,
-  CheckCircle,
-  AlertCircle,
   GitCommit,
   MoreVertical,
+  FileText,
+  BookOpen,
+  Sparkles,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -26,70 +27,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { Decision, DecisionVersion } from "@/types/entities";
 
-// Mock decisions data
-const mockDecisions: (Decision & { versions: DecisionVersion[]; acknowledgments: { total: number; acknowledged: number } })[] = [
-  {
-    id: "d1",
-    title: "Q3 Cloud Migration Timeline",
-    description: "Complete AWS to GCP migration by end of Q3 2024. All services must be migrated with zero downtime.",
-    rationale: "Cost reduction and improved developer experience with GCP tooling.",
-    status: "active",
-    project_id: "p1",
-    created_by: "person-1",
-    created_at: "2024-01-15T10:00:00Z",
-    updated_at: "2024-01-20T14:30:00Z",
-    versions: [
-      { id: "v2", decision_id: "d1", version: 2, content: { title: "", description: "", rationale: "" }, changed_by: "person-1", changed_at: "2024-01-20T14:30:00Z", change_summary: "Updated timeline to Q3" },
-      { id: "v1", decision_id: "d1", version: 1, content: { title: "", description: "", rationale: "" }, changed_by: "person-1", changed_at: "2024-01-15T10:00:00Z", change_summary: "Initial decision" },
-    ],
-    acknowledgments: { total: 12, acknowledged: 8 },
-  },
-  {
-    id: "d2",
-    title: "Feature Freeze During Migration",
-    description: "No new feature development during the migration period. Only critical bug fixes allowed.",
-    rationale: "Reduce risk and ensure team focus on migration success.",
-    status: "active",
-    project_id: "p1",
-    created_by: "person-2",
-    created_at: "2024-01-16T09:00:00Z",
-    updated_at: "2024-01-16T09:00:00Z",
-    versions: [
-      { id: "v1", decision_id: "d2", version: 1, content: { title: "", description: "", rationale: "" }, changed_by: "person-2", changed_at: "2024-01-16T09:00:00Z", change_summary: "Initial decision" },
-    ],
-    acknowledgments: { total: 8, acknowledged: 8 },
-  },
-  {
-    id: "d3",
-    title: "New Design System Adoption",
-    description: "Adopt the new unified design system across all products by Q2 2024.",
-    rationale: "Improve consistency and reduce design debt.",
-    status: "draft",
-    project_id: "p2",
-    created_by: "person-3",
-    created_at: "2024-01-18T11:00:00Z",
-    updated_at: "2024-01-18T11:00:00Z",
-    versions: [
-      { id: "v1", decision_id: "d3", version: 1, content: { title: "", description: "", rationale: "" }, changed_by: "person-3", changed_at: "2024-01-18T11:00:00Z", change_summary: "Draft created" },
-    ],
-    acknowledgments: { total: 15, acknowledged: 3 },
-  },
-  {
-    id: "d4",
-    title: "API Versioning Strategy",
-    description: "Implement semantic versioning for all public APIs with 6-month deprecation cycles.",
-    rationale: "Better developer experience and clearer upgrade paths for API consumers.",
-    status: "superseded",
-    project_id: null,
-    created_by: "person-4",
-    created_at: "2023-12-01T10:00:00Z",
-    updated_at: "2024-01-10T15:00:00Z",
-    versions: [
-      { id: "v3", decision_id: "d4", version: 3, content: { title: "", description: "", rationale: "" }, changed_by: "person-1", changed_at: "2024-01-10T15:00:00Z", change_summary: "Superseded by new policy" },
-    ],
-    acknowledgments: { total: 20, acknowledged: 20 },
-  },
-];
+type DecisionWithMeta = Decision & {
+  versions: DecisionVersion[];
+  acknowledgments: { total: number; acknowledged: number };
+};
 
 const statusStyles: Record<Decision["status"], { color: string; bg: string }> = {
   draft: { color: "text-muted-foreground", bg: "bg-muted" },
@@ -100,10 +41,13 @@ const statusStyles: Record<Decision["status"], { color: string; bg: string }> = 
 
 export default function Ledger() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDecision, setSelectedDecision] = useState<typeof mockDecisions[0] | null>(null);
+  const [selectedDecision, setSelectedDecision] = useState<DecisionWithMeta | null>(null);
   const [statusFilter, setStatusFilter] = useState<Decision["status"] | "all">("all");
 
-  const filteredDecisions = mockDecisions.filter((d) => {
+  // Empty state - no mock data
+  const decisions: DecisionWithMeta[] = [];
+
+  const filteredDecisions = decisions.filter((d) => {
     const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || d.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -121,14 +65,17 @@ export default function Ledger() {
     <AppLayout>
       <div className="flex h-[calc(100vh-1px)]">
         {/* Decision List */}
-        <div className="flex w-96 flex-col border-r">
+        <div className="flex w-[380px] flex-col border-r border-border/50 bg-card/30">
           {/* Header */}
-          <div className="border-b p-4">
+          <div className="border-b border-border/50 p-5">
             <div className="mb-4 flex items-center justify-between">
-              <h1 className="text-xl font-semibold">Decision Ledger</h1>
-              <Button size="sm" className="gap-1">
-                <Plus className="h-4 w-4" />
-                New
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-primary" />
+                <h1 className="text-lg font-semibold tracking-tight">Decision Ledger</h1>
+              </div>
+              <Button size="sm" className="gap-1.5 shadow-sm">
+                <Plus className="h-3.5 w-3.5" />
+                New Decision
               </Button>
             </div>
             <div className="flex gap-2">
@@ -138,16 +85,16 @@ export default function Ledger() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search decisions..."
-                  className="pl-9"
+                  className="h-9 border-border/50 bg-background/50 pl-9 text-sm"
                 />
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon">
+                  <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 border-border/50">
                     <Filter className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-40">
                   <DropdownMenuItem onClick={() => setStatusFilter("all")}>
                     All Statuses
                   </DropdownMenuItem>
@@ -167,121 +114,152 @@ export default function Ledger() {
 
           {/* List */}
           <div className="flex-1 overflow-y-auto">
-            {filteredDecisions.map((decision, index) => (
-              <motion.button
-                key={decision.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => setSelectedDecision(decision)}
-                className={cn(
-                  "w-full border-b p-4 text-left transition-colors hover:bg-muted/50",
-                  selectedDecision?.id === decision.id && "bg-muted"
-                )}
-              >
-                <div className="mb-2 flex items-start justify-between">
-                  <h3 className="font-medium leading-tight">{decision.title}</h3>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {filteredDecisions.length > 0 ? (
+              filteredDecisions.map((decision, index) => (
+                <motion.button
+                  key={decision.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03, duration: 0.2 }}
+                  onClick={() => setSelectedDecision(decision)}
+                  className={cn(
+                    "group w-full border-b border-border/30 p-4 text-left transition-all hover:bg-accent/50",
+                    selectedDecision?.id === decision.id && "bg-accent"
+                  )}
+                >
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <h3 className="font-medium leading-snug">{decision.title}</h3>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+                  </div>
+                  <p className="mb-3 line-clamp-2 text-[13px] leading-relaxed text-muted-foreground">
+                    {decision.description}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "h-5 px-1.5 text-[10px] font-medium uppercase tracking-wide",
+                        statusStyles[decision.status].bg,
+                        statusStyles[decision.status].color
+                      )}
+                    >
+                      {decision.status}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground/70">
+                      v{decision.versions.length}
+                    </span>
+                    <span className="text-muted-foreground/30">·</span>
+                    <span className="text-xs text-muted-foreground/70">
+                      {formatDate(decision.updated_at)}
+                    </span>
+                  </div>
+                </motion.button>
+              ))
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+                <div className="mb-4 rounded-full bg-muted/50 p-4">
+                  <FileText className="h-8 w-8 text-muted-foreground/40" />
                 </div>
-                <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
-                  {decision.description}
+                <h3 className="mb-1 text-sm font-medium">No decisions yet</h3>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Create your first decision to start<br />building your organizational memory
                 </p>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "capitalize",
-                      statusStyles[decision.status].bg,
-                      statusStyles[decision.status].color
-                    )}
-                  >
-                    {decision.status}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    v{decision.versions.length}
-                  </span>
-                  <span className="text-xs text-muted-foreground">·</span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatDate(decision.updated_at)}
-                  </span>
-                </div>
-              </motion.button>
-            ))}
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  New Decision
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Decision Detail */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-background">
           <AnimatePresence mode="wait">
             {selectedDecision ? (
               <motion.div
                 key={selectedDecision.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="p-8"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="mx-auto max-w-3xl p-8"
               >
                 {/* Header */}
-                <div className="mb-6 flex items-start justify-between">
-                  <div>
+                <div className="mb-8">
+                  <div className="mb-4 flex items-start justify-between">
                     <Badge
                       variant="secondary"
                       className={cn(
-                        "mb-2 capitalize",
+                        "h-6 px-2 text-xs font-medium uppercase tracking-wide",
                         statusStyles[selectedDecision.status].bg,
                         statusStyles[selectedDecision.status].color
                       )}
                     >
                       {selectedDecision.status}
                     </Badge>
-                    <h1 className="text-2xl font-semibold">{selectedDecision.title}</h1>
-                    <p className="mt-2 text-muted-foreground">
-                      {selectedDecision.description}
-                    </p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem>Edit</DropdownMenuItem>
+                        <DropdownMenuItem>Duplicate</DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive">
+                          Deprecate
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>Edit</DropdownMenuItem>
-                      <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
-                        Deprecate
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <h1 className="mb-3 text-2xl font-semibold tracking-tight">
+                    {selectedDecision.title}
+                  </h1>
+                  <p className="text-[15px] leading-relaxed text-muted-foreground">
+                    {selectedDecision.description}
+                  </p>
                 </div>
 
                 {/* Stats */}
                 <div className="mb-8 grid grid-cols-3 gap-4">
-                  <Card>
+                  <Card className="border-border/50 bg-card/50">
                     <CardContent className="flex items-center gap-3 p-4">
-                      <Clock className="h-5 w-5 text-muted-foreground" />
+                      <div className="rounded-lg bg-muted/50 p-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                      </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Last Updated</p>
-                        <p className="font-medium">{formatDate(selectedDecision.updated_at)}</p>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Updated
+                        </p>
+                        <p className="text-sm font-medium">{formatDate(selectedDecision.updated_at)}</p>
                       </div>
                     </CardContent>
                   </Card>
-                  <Card>
+                  <Card className="border-border/50 bg-card/50">
                     <CardContent className="flex items-center gap-3 p-4">
-                      <GitCommit className="h-5 w-5 text-muted-foreground" />
+                      <div className="rounded-lg bg-muted/50 p-2">
+                        <GitCommit className="h-4 w-4 text-muted-foreground" />
+                      </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Versions</p>
-                        <p className="font-medium">{selectedDecision.versions.length}</p>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Version
+                        </p>
+                        <p className="text-sm font-medium">{selectedDecision.versions.length}</p>
                       </div>
                     </CardContent>
                   </Card>
-                  <Card>
+                  <Card className="border-border/50 bg-card/50">
                     <CardContent className="flex items-center gap-3 p-4">
-                      <Users className="h-5 w-5 text-muted-foreground" />
+                      <div className="rounded-lg bg-muted/50 p-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                      </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Acknowledged</p>
-                        <p className="font-medium">
-                          {selectedDecision.acknowledgments.acknowledged} / {selectedDecision.acknowledgments.total}
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Acknowledged
+                        </p>
+                        <p className="text-sm font-medium">
+                          {selectedDecision.acknowledgments.acknowledged}/{selectedDecision.acknowledgments.total}
                         </p>
                       </div>
                     </CardContent>
@@ -290,12 +268,15 @@ export default function Ledger() {
 
                 {/* Rationale */}
                 {selectedDecision.rationale && (
-                  <Card className="mb-8">
-                    <CardHeader>
-                      <CardTitle className="text-base">Rationale</CardTitle>
+                  <Card className="mb-8 border-border/50 bg-card/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        Rationale
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-[14px] leading-relaxed text-muted-foreground">
                         {selectedDecision.rationale}
                       </p>
                     </CardContent>
@@ -303,33 +284,35 @@ export default function Ledger() {
                 )}
 
                 {/* Version History */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Version History</CardTitle>
+                <Card className="border-border/50 bg-card/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                      <GitCommit className="h-4 w-4 text-primary" />
+                      Version History
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                    <div className="space-y-1">
                       {selectedDecision.versions.map((version, index) => (
                         <div
                           key={version.id}
                           className="flex items-start gap-3"
                         >
                           <div className="flex flex-col items-center">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                              <GitCommit className="h-4 w-4" />
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/80 text-xs font-medium">
+                              {version.version}
                             </div>
                             {index < selectedDecision.versions.length - 1 && (
-                              <div className="h-8 w-px bg-border" />
+                              <div className="h-6 w-px bg-border/50" />
                             )}
                           </div>
-                          <div className="flex-1 pb-4">
+                          <div className="flex-1 pb-3">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium">v{version.version}</span>
                               <span className="text-xs text-muted-foreground">
                                 {formatDate(version.changed_at)}
                               </span>
                             </div>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-sm text-foreground/80">
                               {version.change_summary}
                             </p>
                           </div>
@@ -343,13 +326,28 @@ export default function Ledger() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex h-full items-center justify-center"
+                transition={{ duration: 0.3 }}
+                className="flex h-full flex-col items-center justify-center p-8"
               >
-                <div className="text-center">
-                  <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-                  <p className="text-muted-foreground">
-                    Select a decision to view details
-                  </p>
+                <div className="mb-6 rounded-2xl bg-gradient-to-br from-muted/50 to-muted/30 p-6">
+                  <BookOpen className="h-12 w-12 text-muted-foreground/30" />
+                </div>
+                <h2 className="mb-2 text-lg font-medium">Your Decision Ledger</h2>
+                <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
+                  The source of truth for all organizational decisions. 
+                  Create decisions from the Ingest page or add them manually.
+                </p>
+                <div className="flex gap-3">
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Plus className="h-3.5 w-3.5" />
+                    New Decision
+                  </Button>
+                  <Button size="sm" className="gap-1.5" asChild>
+                    <a href="/ingest">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Go to Ingest
+                    </a>
+                  </Button>
                 </div>
               </motion.div>
             )}
@@ -359,6 +357,3 @@ export default function Ledger() {
     </AppLayout>
   );
 }
-
-// Missing import
-import { FileText } from "lucide-react";
