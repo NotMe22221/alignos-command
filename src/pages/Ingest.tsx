@@ -7,10 +7,11 @@ import {
   MicOff,
   Loader2,
   CheckCircle,
-  AlertCircle,
   X,
   Sparkles,
 } from "lucide-react";
+import { useVoiceRecording } from "@/hooks/useVoiceRecording";
+import { toast } from "sonner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,7 +55,17 @@ export default function Ingest() {
   const [textContent, setTextContent] = useState("");
   const [processingState, setProcessingState] = useState<ProcessingState>("idle");
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+
+  const { isRecording, isTranscribing, toggleRecording } = useVoiceRecording({
+    onTranscriptionComplete: (text) => {
+      setTextContent((prev) => prev ? `${prev}\n\n${text}` : text);
+      setMode("text");
+      toast.success("Transcription complete!");
+    },
+    onError: (error) => {
+      toast.error(`Transcription failed: ${error}`);
+    },
+  });
 
   const handleProcess = async () => {
     if (!textContent.trim()) return;
@@ -76,10 +87,6 @@ export default function Ingest() {
     }
   };
 
-  const toggleRecording = () => {
-    setIsRecording(!isRecording);
-    // TODO: Implement voice recording
-  };
 
   const handleCommit = () => {
     console.log("Committing to truth:", extractionResult);
@@ -196,24 +203,35 @@ export default function Ingest() {
                 >
                   <button
                     onClick={toggleRecording}
+                    disabled={isTranscribing}
                     className={cn(
                       "mb-6 flex h-24 w-24 items-center justify-center rounded-full transition-all",
-                      isRecording
+                      isTranscribing
+                        ? "bg-muted text-muted-foreground"
+                        : isRecording
                         ? "animate-pulse bg-destructive text-destructive-foreground"
                         : "bg-primary text-primary-foreground hover:bg-primary/90"
                     )}
                   >
-                    {isRecording ? (
+                    {isTranscribing ? (
+                      <Loader2 className="h-10 w-10 animate-spin" />
+                    ) : isRecording ? (
                       <MicOff className="h-10 w-10" />
                     ) : (
                       <Mic className="h-10 w-10" />
                     )}
                   </button>
                   <p className="text-sm font-medium">
-                    {isRecording ? "Recording... Click to stop" : "Click to start recording"}
+                    {isTranscribing
+                      ? "Transcribing..."
+                      : isRecording
+                      ? "Recording... Click to stop"
+                      : "Click to start recording"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Voice will be transcribed automatically
+                    {isTranscribing
+                      ? "Converting speech to text with Whisper"
+                      : "Voice will be transcribed automatically"}
                   </p>
                 </motion.div>
               )}
