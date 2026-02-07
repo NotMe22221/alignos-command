@@ -6,68 +6,14 @@ import {
   Users,
   Volume2,
   TrendingUp,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MetricCard } from "@/components/shared/MetricCard";
 import { QuickInput } from "@/components/shared/QuickInput";
-import { ActivityItem } from "@/components/shared/ActivityItem";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Event, DashboardMetrics } from "@/types/entities";
-
-// Mock data - will be replaced with real data from Supabase
-const mockMetrics: DashboardMetrics = {
-  decisions_today: 7,
-  conflicts_detected: 2,
-  pending_acknowledgments: 14,
-  ownership_gaps: 3,
-  total_decisions: 156,
-  total_people: 48,
-  total_projects: 12,
-};
-
-const mockEvents: (Event & { entityName: string })[] = [
-  {
-    id: "1",
-    entity_type: "decision",
-    entity_id: "d1",
-    event_type: "created",
-    created_at: new Date(Date.now() - 5 * 60000).toISOString(),
-    entityName: "Q2 Product Roadmap Finalized",
-  },
-  {
-    id: "2",
-    entity_type: "decision",
-    entity_id: "d2",
-    event_type: "updated",
-    created_at: new Date(Date.now() - 45 * 60000).toISOString(),
-    entityName: "Engineering Hiring Plan 2024",
-  },
-  {
-    id: "3",
-    entity_type: "project",
-    entity_id: "p1",
-    event_type: "conflict_detected",
-    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
-    entityName: "Mobile App Redesign",
-  },
-  {
-    id: "4",
-    entity_type: "person",
-    entity_id: "u1",
-    event_type: "acknowledged",
-    created_at: new Date(Date.now() - 4 * 3600000).toISOString(),
-    entityName: "Sarah Chen acknowledged Budget Decision",
-  },
-  {
-    id: "5",
-    entity_type: "decision",
-    entity_id: "d3",
-    event_type: "created",
-    created_at: new Date(Date.now() - 8 * 3600000).toISOString(),
-    entityName: "New API Versioning Strategy",
-  },
-];
 
 export default function Index() {
   const handleAsk = (query: string) => {
@@ -122,36 +68,33 @@ export default function Index() {
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             title="Decisions Today"
-            value={mockMetrics.decisions_today}
-            subtitle="3 more than yesterday"
+            value={0}
+            subtitle="No decisions yet"
             icon={<FileText className="h-5 w-5 text-muted-foreground" />}
-            trend="up"
           />
           <MetricCard
             title="Conflicts Detected"
-            value={mockMetrics.conflicts_detected}
-            subtitle="Requires attention"
-            icon={<AlertTriangle className="h-5 w-5 text-conflict" />}
-            variant="conflict"
+            value={0}
+            subtitle="All clear"
+            icon={<AlertTriangle className="h-5 w-5 text-muted-foreground" />}
           />
           <MetricCard
             title="Pending Acknowledgments"
-            value={mockMetrics.pending_acknowledgments}
-            subtitle="Across 8 decisions"
-            icon={<Clock className="h-5 w-5 text-pending" />}
-            variant="pending"
+            value={0}
+            subtitle="Nothing pending"
+            icon={<Clock className="h-5 w-5 text-muted-foreground" />}
           />
           <MetricCard
             title="Ownership Gaps"
-            value={mockMetrics.ownership_gaps}
-            subtitle="Unassigned decisions"
+            value={0}
+            subtitle="Fully assigned"
             icon={<Users className="h-5 w-5 text-muted-foreground" />}
           />
         </div>
 
         {/* Two Column Layout */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* Activity Feed */}
+          {/* Activity Feed - Empty State */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base font-medium">
@@ -162,19 +105,28 @@ export default function Index() {
                 Live
               </div>
             </CardHeader>
-            <CardContent className="space-y-1">
-              {mockEvents.map((event, index) => (
-                <ActivityItem
-                  key={event.id}
-                  event={event}
-                  entityName={event.entityName}
-                  index={index}
-                />
-              ))}
+            <CardContent>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center py-12"
+              >
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5">
+                  <Sparkles className="h-8 w-8 text-primary" />
+                </div>
+                <h3 className="mb-2 text-lg font-medium">No activity yet</h3>
+                <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
+                  Start by ingesting documents, adding decisions, or importing your organizational data.
+                </p>
+                <Button className="gap-2">
+                  Get Started
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </motion.div>
             </CardContent>
           </Card>
 
-          {/* Quick Stats */}
+          {/* Quick Stats - Empty State */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-medium">
@@ -187,21 +139,27 @@ export default function Index() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Total Decisions</span>
                 </div>
-                <span className="font-medium">{mockMetrics.total_decisions}</span>
+                <span className="font-medium text-muted-foreground">—</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">People Tracked</span>
                 </div>
-                <span className="font-medium">{mockMetrics.total_people}</span>
+                <span className="font-medium text-muted-foreground">—</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm">Active Projects</span>
                 </div>
-                <span className="font-medium">{mockMetrics.total_projects}</span>
+                <span className="font-medium text-muted-foreground">—</span>
+              </div>
+              
+              <div className="mt-6 rounded-lg border border-dashed p-4">
+                <p className="text-center text-xs text-muted-foreground">
+                  Add data to see your organization's health metrics
+                </p>
               </div>
             </CardContent>
           </Card>
