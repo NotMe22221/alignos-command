@@ -11,9 +11,9 @@ serve(async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OpenAI");
-    if (!OPENAI_API_KEY) {
-      throw new Error("OpenAI API key is not configured");
+    const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
+    if (!DEEPGRAM_API_KEY) {
+      throw new Error("Deepgram API key is not configured");
     }
 
     const formData = await req.formData();
@@ -23,29 +23,29 @@ serve(async (req) => {
       throw new Error("No audio file provided");
     }
 
-    // Forward to OpenAI Whisper API
-    const whisperFormData = new FormData();
-    whisperFormData.append("file", audioFile, "audio.webm");
-    whisperFormData.append("model", "whisper-1");
-    whisperFormData.append("response_format", "json");
+    // Convert file to array buffer
+    const audioBuffer = await audioFile.arrayBuffer();
 
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    // Call Deepgram API
+    const response = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Token ${DEEPGRAM_API_KEY}`,
+        "Content-Type": "audio/webm",
       },
-      body: whisperFormData,
+      body: audioBuffer,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Whisper API error:", response.status, errorText);
-      throw new Error(`Whisper API error: ${response.status}`);
+      console.error("Deepgram API error:", response.status, errorText);
+      throw new Error(`Deepgram API error: ${response.status}`);
     }
 
     const result = await response.json();
+    const transcript = result.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
 
-    return new Response(JSON.stringify({ text: result.text }), {
+    return new Response(JSON.stringify({ text: transcript }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
