@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -12,44 +12,91 @@ import {
   Building2,
   Share2,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { ForceGraph } from "@/components/graph/ForceGraph";
+import { useGraphData, type GraphNode } from "@/hooks/useGraphData";
 import type { EntityType } from "@/types/entities";
 
-const nodeColors: Record<EntityType, string> = {
+const nodeColors: Record<string, string> = {
   person: "hsl(220, 70%, 50%)",
   team: "hsl(280, 70%, 50%)",
   project: "hsl(160, 70%, 45%)",
   decision: "hsl(35, 92%, 50%)",
-  document: "hsl(200, 70%, 50%)",
-  source: "hsl(200, 70%, 50%)",
 };
 
-const nodeIcons: Record<EntityType, typeof Users> = {
+const nodeIcons: Record<string, typeof Users> = {
   person: Users,
   team: Building2,
   project: FolderOpen,
   decision: FileText,
-  document: FileText,
-  source: FileText,
 };
 
-const entityDescriptions: Record<EntityType, string> = {
+const entityDescriptions: Record<string, string> = {
   person: "Team members and stakeholders",
   team: "Departments and groups",
   project: "Active initiatives",
   decision: "Documented decisions",
-  document: "Source documents",
-  source: "Data sources",
 };
 
 export default function Graph() {
   const navigate = useNavigate();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<EntityType | "all">("all");
+  const [filter, setFilter] = useState<string>("all");
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+
+  const { data: graphData, isLoading } = useGraphData();
+
+  // Update dimensions on resize
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight,
+        });
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
+
+  // Filter nodes based on search and type filter
+  const filteredData = graphData
+    ? {
+        nodes: graphData.nodes.filter((node) => {
+          const matchesSearch = node.label
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase());
+          const matchesFilter = filter === "all" || node.type === filter;
+          return matchesSearch && matchesFilter;
+        }),
+        links: graphData.links.filter((link) => {
+          const filteredNodeIds = new Set(
+            graphData.nodes
+              .filter((node) => {
+                const matchesSearch = node.label
+                  .toLowerCase()
+                  .includes(searchQuery.toLowerCase());
+                const matchesFilter = filter === "all" || node.type === filter;
+                return matchesSearch && matchesFilter;
+              })
+              .map((n) => n.id)
+          );
+          return filteredNodeIds.has(link.source) && filteredNodeIds.has(link.target);
+        }),
+      }
+    : { nodes: [], links: [] };
+
+  const hasData = filteredData.nodes.length > 0;
 
   return (
     <AppLayout>
@@ -61,7 +108,7 @@ export default function Graph() {
               Knowledge Graph
             </h1>
             <p className="text-sm text-muted-foreground">
-              Interactive organizational map
+              {graphData?.nodes.length || 0} entities • {graphData?.links.length || 0} connections
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -90,74 +137,150 @@ export default function Graph() {
           </div>
         </div>
 
-        {/* Empty Graph Container */}
-        <div className="relative flex-1">
+        {/* Graph Container */}
+        <div ref={containerRef} className="relative flex-1">
           {/* Placeholder Background Pattern */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,_hsl(var(--muted))_1px,_transparent_0)] bg-[length:24px_24px] opacity-50" />
-          
-          {/* Zoom Controls */}
-          <div className="absolute bottom-4 left-4 flex flex-col gap-1">
-            <Button variant="outline" size="icon" disabled>
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" disabled>
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" disabled>
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-          </div>
 
-          {/* Empty State */}
-          <div className="flex h-full items-center justify-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center"
-            >
-              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-primary/10 to-primary/5">
-                <Share2 className="h-12 w-12 text-primary" />
-              </div>
-              <h2 className="mb-2 text-2xl font-medium">Your Knowledge Graph</h2>
-              <p className="mb-8 max-w-md text-center text-muted-foreground">
-                Visualize relationships between people, teams, projects, and decisions. 
-                Start by adding organizational data to see your knowledge graph come to life.
-              </p>
+          {isLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : hasData ? (
+            <>
+              <ForceGraph
+                nodes={filteredData.nodes}
+                links={filteredData.links}
+                width={dimensions.width}
+                height={dimensions.height}
+                onNodeClick={setSelectedNode}
+              />
 
-              {/* Entity Type Legend */}
-              <Card className="mb-6 w-full max-w-md">
-                <CardContent className="p-4">
-                  <p className="mb-3 text-sm font-medium">Entity types in your graph:</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(["person", "team", "project", "decision"] as EntityType[]).map((type) => {
-                      const Icon = nodeIcons[type];
-                      return (
-                        <div key={type} className="flex items-center gap-3">
-                          <div
-                            className="flex h-8 w-8 items-center justify-center rounded-lg"
-                            style={{ backgroundColor: nodeColors[type] }}
-                          >
-                            <Icon className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium capitalize">{type}s</p>
-                            <p className="text-xs text-muted-foreground">
-                              {entityDescriptions[type]}
-                            </p>
-                          </div>
+              {/* Selected Node Info */}
+              {selectedNode && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="absolute right-4 top-4 w-72"
+                >
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="mb-3 flex items-center gap-3">
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-lg"
+                          style={{ backgroundColor: nodeColors[selectedNode.type] }}
+                        >
+                          {(() => {
+                            const Icon = nodeIcons[selectedNode.type];
+                            return <Icon className="h-5 w-5 text-white" />;
+                          })()}
                         </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
+                        <div>
+                          <p className="font-medium">{selectedNode.label}</p>
+                          <p className="text-xs capitalize text-muted-foreground">
+                            {selectedNode.type}
+                          </p>
+                        </div>
+                      </div>
+                      {"description" in selectedNode.data && selectedNode.data.description && (
+                        <p className="text-sm text-muted-foreground">
+                          {selectedNode.data.description}
+                        </p>
+                      )}
+                      {"role" in selectedNode.data && (
+                        <p className="text-sm text-muted-foreground">
+                          {(selectedNode.data as any).role}
+                        </p>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-3 w-full"
+                        onClick={() => setSelectedNode(null)}
+                      >
+                        Close
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
 
-              <Button className="gap-2" onClick={() => navigate("/ingest")}>
-                Import Data
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </motion.div>
-          </div>
+              {/* Legend */}
+              <div className="absolute bottom-4 right-4">
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="flex gap-4">
+                      {(["person", "team", "project", "decision"] as const).map((type) => {
+                        const Icon = nodeIcons[type];
+                        return (
+                          <div key={type} className="flex items-center gap-2">
+                            <div
+                              className="flex h-6 w-6 items-center justify-center rounded"
+                              style={{ backgroundColor: nodeColors[type] }}
+                            >
+                              <Icon className="h-3 w-3 text-white" />
+                            </div>
+                            <span className="text-xs capitalize">{type}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : (
+            /* Empty State */
+            <div className="flex h-full items-center justify-center">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center"
+              >
+                <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-primary/10 to-primary/5">
+                  <Share2 className="h-12 w-12 text-primary" />
+                </div>
+                <h2 className="mb-2 text-2xl font-medium">Your Knowledge Graph</h2>
+                <p className="mb-8 max-w-md text-center text-muted-foreground">
+                  Visualize relationships between people, teams, projects, and decisions.
+                  Start by adding organizational data to see your knowledge graph come to life.
+                </p>
+
+                {/* Entity Type Legend */}
+                <Card className="mb-6 w-full max-w-md">
+                  <CardContent className="p-4">
+                    <p className="mb-3 text-sm font-medium">Entity types in your graph:</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(["person", "team", "project", "decision"] as const).map((type) => {
+                        const Icon = nodeIcons[type];
+                        return (
+                          <div key={type} className="flex items-center gap-3">
+                            <div
+                              className="flex h-8 w-8 items-center justify-center rounded-lg"
+                              style={{ backgroundColor: nodeColors[type] }}
+                            >
+                              <Icon className="h-4 w-4 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium capitalize">{type}s</p>
+                              <p className="text-xs text-muted-foreground">
+                                {entityDescriptions[type]}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Button className="gap-2" onClick={() => navigate("/ingest")}>
+                  Import Data
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </motion.div>
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>
