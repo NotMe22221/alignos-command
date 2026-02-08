@@ -1,288 +1,184 @@
 
 
-# AlignOS - AI Chief of Staff & Organizational Intelligence System
+# Database Schema Setup for AlignOS
 
-## Vision
-An operating system for how a company thinks — infrastructure for alignment that ingests communication, maintains living truth, and routes information to the right stakeholders.
-
----
-
-## Architecture Overview
-
-**Frontend:** React + Vite + TypeScript + Tailwind  
-**Backend:** Lovable Cloud (Supabase) — Postgres DB, Edge Functions, Storage  
-**AI:** Lovable AI Gateway (Gemini) for extraction, summarization, conflict detection  
-**Voice:** ElevenLabs for text-to-speech briefings, Whisper integration for voice input  
-**Visualizations:** D3.js force-directed graph for knowledge graph
+This plan creates the complete Postgres database structure for persisting organizational data including decisions, people, projects, teams, and all supporting entities.
 
 ---
 
-## Design System
+## Overview
 
-Minimal, calm, enterprise-grade aesthetic inspired by Linear/Notion/Vercel:
-- Monochrome palette with subtle accent colors for status (conflicts, updates, pending)
-- Clean typography hierarchy
-- Generous whitespace
-- Subtle animations for "living" feel
-- Dark mode support
+We'll create 10 core tables that power the AlignOS system:
 
----
-
-## Screen 1: Command Center (Home)
-
-The executive cockpit — a real-time pulse of the organization.
-
-**Layout:**
-- Top hero section with key metrics: Decisions today, Conflicts detected, Pending acknowledgments, Ownership gaps
-- Quick input bar: "Ask AlignOS anything" with voice, text, and upload triggers
-- Activity feed: Recent decisions, updates, and changes (live-updating)
-- Alert cards for conflicts and missing acknowledgments
-- "What changed today?" button with voice playback option
-
-**AI Features (Real):**
-- Natural language query processing
-- Daily briefing generation
-- Voice synthesis via ElevenLabs
+| Table | Purpose |
+|-------|---------|
+| `teams` | Organizational units (can be hierarchical) |
+| `persons` | People in the organization with roles |
+| `projects` | Initiatives with owners and status |
+| `decisions` | The core decision records |
+| `decision_versions` | Git-style version history for decisions |
+| `documents` | Ingested transcripts, notes, files |
+| `sources` | Raw input tracking (text, voice, file, api) |
+| `events` | Activity log for all entity changes |
+| `relationships` | Graph edges connecting entities |
+| `acknowledgments` | Who has seen/acknowledged decisions |
+| `conflicts` | AI-detected organizational conflicts |
 
 ---
 
-## Screen 2: Ingestion Interface
+## Implementation Steps
 
-The entry point for new information.
+### Step 1: Create Enum Types
+Define the custom PostgreSQL enums for status fields:
+- `project_status`: active, completed, on_hold, archived
+- `decision_status`: draft, active, superseded, deprecated
+- `document_type`: transcript, document, notes, email, other
+- `source_type`: text, file, voice, api
+- `event_type`: created, updated, deleted, acknowledged, conflict_detected
+- `entity_type`: person, team, project, decision, document, source
+- `relationship_type`: owns, member_of, depends_on, relates_to, affects, stakeholder
+- `conflict_type`: duplicate, contradiction, timeline_mismatch, ownership_overlap, stale
+- `conflict_status`: detected, reviewing, resolved, dismissed
 
-**Capabilities:**
-- Text paste with rich formatting support
-- File upload (transcripts, documents, meeting notes)
-- Voice recording with real-time Whisper transcription
+### Step 2: Create Core Tables
 
-**AI Processing Pipeline:**
-1. Raw input → AI extraction (decisions, people, projects, dates)
-2. Entity recognition and linking to existing graph
-3. Stakeholder suggestion based on affected areas
-4. Conflict pre-check against existing decisions
-
-**Output:**
-- Editable extraction results
-- Confirm/reject/edit interface
-- "Commit to truth" action
-
----
-
-## Screen 3: Knowledge Graph
-
-Interactive force-directed visualization of organizational relationships.
-
-**Nodes:**
-- People (with role, team)
-- Teams (with members, projects)
-- Projects (with owner, status)
-- Decisions (with version, stakeholders)
-- Documents (with sources)
-
-**Interactions:**
-- Click node → Side panel with full details, history, dependencies
-- Drag to explore connections
-- Search/filter by entity type
-- Zoom levels: Org-wide → Team → Individual focus
-
-**Implementation:** D3.js force-directed graph with collision detection
-
----
-
-## Screen 4: Decision Ledger
-
-The canonical, versioned source of truth.
-
-**Decision Record:**
-- Title, description, rationale
-- Version history (Git-style commits)
-- Timestamps with author attribution
-- Affected stakeholders list
-- Acknowledgment tracking (who's seen, who hasn't)
-- Related decisions and dependencies
-
-**Views:**
-- Chronological timeline
-- By project/team filter
-- Pending acknowledgments only
-- Recently changed
-
----
-
-## Screen 5: Propagation / Awareness View
-
-Visibility into information flow.
-
-**Visualization:**
-- Stakeholder matrix: Who knows × Who should know
-- Flow diagram showing information propagation paths
-- "Stuck" indicators where information hasn't reached targets
-- Time-based view: How long since decision vs. acknowledgment
-
-**Actions:**
-- Nudge stakeholders
-- View detailed propagation history
-- Set escalation triggers
-
----
-
-## Screen 6: Critic / Conflict Panel
-
-AI-powered organizational health monitor.
-
-**Conflict Types:**
-- Duplicate or contradictory decisions
-- Timeline mismatches (deadlines that don't align)
-- Ownership overlaps or gaps
-- Stale decisions needing review
-
-**Resolution Workflow:**
-- Side-by-side comparison
-- Suggested resolution from AI
-- One-click merge or deprecate
-- Assign owner for resolution
-
----
-
-## Data Model (Postgres)
-
-**Core Entities:**
+**Teams Table**
 ```
-persons (id, name, email, role, team_id, created_at)
-teams (id, name, parent_team_id, created_at)
-projects (id, name, description, owner_id, team_id, status, created_at)
-decisions (id, title, description, rationale, status, created_at, created_by)
-decision_versions (id, decision_id, version, content, changed_by, changed_at)
-sources (id, type, raw_content, processed_content, created_at)
-events (id, entity_type, entity_id, event_type, metadata, created_at)
-relationships (id, source_type, source_id, target_type, target_id, relationship_type)
-acknowledgments (id, decision_id, person_id, acknowledged_at)
-conflicts (id, type, entity_ids, status, suggested_resolution, created_at)
+teams (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,
+  description text,
+  parent_team_id uuid REFERENCES teams(id),
+  created_at timestamptz DEFAULT now()
+)
 ```
 
----
-
-## AI Services (Edge Functions)
-
-**1. `/functions/extract`**
-- Input: Raw text/transcript
-- Output: Structured entities (decisions, people, projects, dates, relationships)
-
-**2. `/functions/summarize`**
-- Input: Content or decision history
-- Output: Executive summary
-
-**3. `/functions/detect-conflicts`**
-- Input: New decision + existing decisions
-- Output: Potential conflicts with confidence scores
-
-**4. `/functions/suggest-stakeholders`**
-- Input: Decision context
-- Output: Recommended stakeholders based on graph analysis
-
-**5. `/functions/daily-brief`**
-- Input: Time range
-- Output: Text summary + optional ElevenLabs audio URL
-
-**6. `/functions/transcribe`**
-- Input: Audio file
-- Output: Transcribed text (via Whisper/speech API)
-
----
-
-## Voice Features
-
-**Input (Whisper):**
-- Browser MediaRecorder → Upload to storage → Edge function transcription
-- Real-time feedback during recording
-
-**Output (ElevenLabs):**
-- "What changed today?" generates audio briefing
-- Decision summaries as audio
-- Small, elegant audio player component
-
----
-
-## Real-Time Features
-
-- Supabase Realtime subscriptions for live updates
-- Command Center activity feed auto-refreshes
-- Graph updates when new entities are committed
-- Toast notifications for conflicts and acknowledgment requests
-
----
-
-## Component Structure
-
+**Persons Table**
 ```
-src/
-├── components/
-│   ├── command-center/
-│   ├── ingestion/
-│   ├── knowledge-graph/
-│   ├── decision-ledger/
-│   ├── propagation/
-│   ├── conflicts/
-│   ├── shared/ (AudioPlayer, EntityCard, Timeline, etc.)
-│   └── ui/ (existing shadcn components)
-├── hooks/
-│   ├── useDecisions.ts
-│   ├── useKnowledgeGraph.ts
-│   ├── useIngestion.ts
-│   └── useRealtime.ts
-├── services/
-│   ├── ai.ts (extraction, summarization)
-│   ├── voice.ts (recording, playback)
-│   └── graph.ts (entity relationships)
-├── pages/
-│   ├── Index.tsx (Command Center)
-│   ├── Ingest.tsx
-│   ├── Graph.tsx
-│   ├── Ledger.tsx
-│   ├── Propagation.tsx
-│   └── Conflicts.tsx
-└── types/
-    └── entities.ts
+persons (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,
+  email text UNIQUE NOT NULL,
+  role text NOT NULL,
+  team_id uuid REFERENCES teams(id),
+  avatar_url text,
+  created_at timestamptz DEFAULT now()
+)
 ```
 
+**Projects Table**
+```
+projects (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,
+  description text NOT NULL,
+  owner_id uuid REFERENCES persons(id),
+  team_id uuid REFERENCES teams(id),
+  status project_status DEFAULT 'active',
+  created_at timestamptz DEFAULT now()
+)
+```
+
+**Decisions Table**
+```
+decisions (
+  id uuid PRIMARY KEY,
+  title text NOT NULL,
+  description text NOT NULL,
+  rationale text,
+  status decision_status DEFAULT 'draft',
+  project_id uuid REFERENCES projects(id),
+  created_by uuid REFERENCES persons(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+)
+```
+
+**Decision Versions Table**
+```
+decision_versions (
+  id uuid PRIMARY KEY,
+  decision_id uuid REFERENCES decisions(id) ON DELETE CASCADE,
+  version integer NOT NULL,
+  content jsonb NOT NULL,
+  changed_by uuid REFERENCES persons(id),
+  changed_at timestamptz DEFAULT now(),
+  change_summary text,
+  UNIQUE(decision_id, version)
+)
+```
+
+### Step 3: Create Supporting Tables
+
+**Documents, Sources, Events, Relationships, Acknowledgments, Conflicts**
+
+Each with appropriate foreign keys and constraints.
+
+### Step 4: Enable Row Level Security
+
+Since this is an organizational tool (not multi-user yet), we'll set up RLS with public read access and authenticated write access. This allows:
+- Anyone can read all organizational data
+- Authenticated users can create/update/delete
+
+### Step 5: Enable Realtime
+
+Enable Supabase Realtime on key tables for live updates:
+- `decisions` - for live decision feed
+- `events` - for activity stream
+- `conflicts` - for alert notifications
+
+### Step 6: Create Indexes
+
+Add performance indexes on:
+- `decisions(status)` - for filtering
+- `decisions(created_at)` - for timeline queries
+- `events(entity_type, entity_id)` - for entity lookups
+- `events(created_at)` - for activity feed
+- `acknowledgments(decision_id, person_id)` - for lookups
+
+### Step 7: Create Updated_at Trigger
+
+A trigger function to automatically update `updated_at` timestamps on decisions.
+
 ---
 
-## Implementation Phases
+## Code Changes
 
-**Phase 1:** Foundation
-- Design system and layout shell
-- Database schema and types
-- Navigation between all 6 screens
+After the database migration, we'll update the application:
 
-**Phase 2:** Core Screens
-- Command Center with metrics
-- Decision Ledger with CRUD
-- Ingestion interface (text + upload)
+1. **Create data hooks** in `src/hooks/`:
+   - `useDecisions.ts` - CRUD operations for decisions
+   - `usePersons.ts` - People management
+   - `useProjects.ts` - Project management
+   - `useTeams.ts` - Team management
+   - `useEvents.ts` - Activity feed with realtime subscription
 
-**Phase 3:** AI Integration
-- Extraction edge function
-- Summarization
-- Conflict detection
-- Connect to Command Center and Ingestion
+2. **Update pages** to use real data:
+   - `Index.tsx` - Connect metrics and activity feed
+   - `Ledger.tsx` - Connect decision list and CRUD
+   - `Conflicts.tsx` - Connect conflict data
+   - `Propagation.tsx` - Connect acknowledgment tracking
 
-**Phase 4:** Knowledge Graph
-- D3.js force graph implementation
-- Entity detail panels
-- Search and filter
-
-**Phase 5:** Voice & Advanced
-- Voice recording with transcription
-- ElevenLabs audio playback
-- Propagation view
-- Real-time subscriptions
+3. **Update Ingest page** to save extracted data to database
 
 ---
 
-## Production-Ready Architecture
+## Technical Details
 
-- All AI calls through edge functions (no client-side API keys)
-- Modular service wrappers for easy provider swaps
-- Type-safe database queries with generated types
-- RLS policies for future multi-tenant support
-- Clean separation between mock data and real APIs
+### Full Migration SQL
+
+The migration will include:
+- 9 enum types
+- 11 tables with proper foreign key relationships
+- RLS policies for each table
+- Realtime publication for live updates
+- Performance indexes
+- Automatic `updated_at` trigger
+
+### Security Considerations
+
+- RLS enabled on all tables
+- Public read access (organizational transparency)
+- Authenticated write access
+- Cascade deletes for dependent records (versions, acknowledgments)
 
