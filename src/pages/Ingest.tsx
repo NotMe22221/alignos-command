@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, forwardRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -9,9 +9,11 @@ import {
   CheckCircle,
   X,
   Sparkles,
+  File,
 } from "lucide-react";
 import { useVoiceRecording } from "@/hooks/useVoiceRecording";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +21,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ExtractionResult } from "@/types/entities";
+
+// Wrap motion components that need refs for AnimatePresence
+const MotionDiv = forwardRef<HTMLDivElement, React.ComponentProps<typeof motion.div>>(
+  (props, ref) => <motion.div ref={ref} {...props} />
+);
 
 type InputMode = "text" | "file" | "voice";
 type ProcessingState = "idle" | "processing" | "complete" | "error";
@@ -55,6 +62,7 @@ export default function Ingest() {
   const [textContent, setTextContent] = useState("");
   const [processingState, setProcessingState] = useState<ProcessingState>("idle");
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; extracting: boolean } | null>(null);
 
   const { isRecording, isTranscribing, toggleRecording } = useVoiceRecording({
     onTranscriptionComplete: (text) => {
@@ -79,11 +87,68 @@ export default function Ingest() {
     setProcessingState("complete");
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // TODO: Handle file upload
-      console.log("File selected:", file.name);
+    if (!file) return;
+
+    // Check file size (max 20MB)
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 20MB.");
+      return;
+    }
+
+    setUploadedFile({ name: file.name, extracting: true });
+
+    try {
+      // Handle text files directly
+      if (file.type === "text/plain" || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
+        const text = await file.text();
+        setTextContent(text);
+        setMode("text");
+        setUploadedFile(null);
+        toast.success(`Loaded ${file.name}`);
+        return;
+      }
+
+      // Handle PDF files via edge function
+      if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const { data: { publicUrl } } = supabase.storage.from("temp").getPublicUrl("dummy");
+        const baseUrl = publicUrl.replace("/storage/v1/object/public/temp/dummy", "");
+        
+        const response = await fetch(`${baseUrl}/functions/v1/extract-pdf`, {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Extraction failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+        
+        if (result.text) {
+          setTextContent(result.text);
+          setMode("text");
+          toast.success(`Extracted text from ${file.name}`);
+        } else {
+          throw new Error("No text could be extracted from the PDF");
+        }
+        
+        setUploadedFile(null);
+        return;
+      }
+
+      // Unsupported file type
+      toast.error("Unsupported file type. Please upload a .txt, .md, or .pdf file.");
+      setUploadedFile(null);
+    } catch (error) {
+      console.error("File upload error:", error);
+      toast.error(`Failed to process file: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setUploadedFile(null);
     }
   };
 
@@ -153,7 +218,7 @@ export default function Ingest() {
             {/* Input Area */}
             <AnimatePresence mode="wait">
               {mode === "text" && (
-                <motion.div
+                <MotionDiv
                   key="text"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -165,36 +230,56 @@ export default function Ingest() {
                     placeholder="Paste meeting notes, transcripts, or any text content..."
                     className="min-h-[300px] resize-none"
                   />
-                </motion.div>
+                </MotionDiv>
               )}
 
               {mode === "file" && (
-                <motion.div
+                <MotionDiv
                   key="file"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                 >
-                  <label className="flex min-h-[300px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/25 transition-colors hover:border-muted-foreground/50 hover:bg-muted/50">
-                    <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
-                    <p className="mb-1 text-sm font-medium">
-                      Drop files here or click to upload
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Supports transcripts, documents, and meeting notes
-                    </p>
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                      accept=".txt,.md,.doc,.docx,.pdf"
-                    />
-                  </label>
-                </motion.div>
+                  {uploadedFile ? (
+                    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-lg border bg-muted/25">
+                      <div className="mb-4 flex items-center gap-3">
+                        <File className="h-8 w-8 text-primary" />
+                        <span className="font-medium">{uploadedFile.name}</span>
+                      </div>
+                      {uploadedFile.extracting && (
+                        <>
+                          <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
+                          <p className="text-sm text-muted-foreground">
+                            Extracting text from PDF...
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            This may take a moment for scanned documents
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <label className="flex min-h-[300px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/25 transition-colors hover:border-muted-foreground/50 hover:bg-muted/50">
+                      <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
+                      <p className="mb-1 text-sm font-medium">
+                        Drop files here or click to upload
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Supports .txt, .md, and .pdf files (including scanned PDFs)
+                      </p>
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                        accept=".txt,.md,.pdf"
+                      />
+                    </label>
+                  )}
+                </MotionDiv>
               )}
 
               {mode === "voice" && (
-                <motion.div
+                <MotionDiv
                   key="voice"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -233,7 +318,7 @@ export default function Ingest() {
                       ? "Converting speech to text with Whisper"
                       : "Voice will be transcribed automatically"}
                   </p>
-                </motion.div>
+                </MotionDiv>
               )}
             </AnimatePresence>
 
