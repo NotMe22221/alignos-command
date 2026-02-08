@@ -1,4 +1,5 @@
 import { useState, forwardRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -20,7 +21,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { ExtractionResult } from "@/types/entities";
 
 // Wrap motion components that need refs for AnimatePresence
 const MotionDiv = forwardRef<HTMLDivElement, React.ComponentProps<typeof motion.div>>(
@@ -28,46 +28,30 @@ const MotionDiv = forwardRef<HTMLDivElement, React.ComponentProps<typeof motion.
 );
 
 type InputMode = "text" | "file" | "voice";
-type ProcessingState = "idle" | "processing" | "complete" | "error";
+type ProcessingState = "idle" | "processing" | "complete" | "error" | "committing";
 
-// Mock extraction result
-const mockExtractionResult: ExtractionResult = {
-  decisions: [
-    {
-      title: "Migrate to new cloud provider by Q3",
-      description: "Team agreed to complete AWS to GCP migration before end of Q3",
-      status: "draft",
-    },
-    {
-      title: "Freeze feature development during migration",
-      description: "No new features until migration is complete",
-      status: "draft",
-    },
-  ],
-  people: [
-    { name: "Sarah Chen", role: "Engineering Lead" },
-    { name: "Marcus Johnson", role: "DevOps Manager" },
-  ],
-  projects: [
-    { name: "Cloud Migration", status: "active" },
-  ],
-  relationships: [],
-  suggested_stakeholders: ["Platform Team", "Security Team", "Finance"],
-  conflicts: [],
-  summary: "Meeting covered Q3 cloud migration timeline and feature freeze decision.",
-};
+interface ExtractionResult {
+  decisions: Array<{ title: string; description: string; rationale?: string }>;
+  people: Array<{ name: string; role: string }>;
+  projects: Array<{ name: string; description: string }>;
+  suggested_stakeholders: string[];
+  summary: string;
+}
 
 export default function Ingest() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<InputMode>("text");
   const [textContent, setTextContent] = useState("");
   const [processingState, setProcessingState] = useState<ProcessingState>("idle");
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; extracting: boolean } | null>(null);
+  const [sourceType, setSourceType] = useState<"text" | "file" | "voice">("text");
 
   const { isRecording, isTranscribing, toggleRecording } = useVoiceRecording({
     onTranscriptionComplete: (text) => {
       setTextContent((prev) => prev ? `${prev}\n\n${text}` : text);
       setMode("text");
+      setSourceType("voice");
       toast.success("Transcription complete!");
     },
     onError: (error) => {
@@ -80,27 +64,42 @@ export default function Ingest() {
     
     setProcessingState("processing");
     
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    setExtractionResult(mockExtractionResult);
-    setProcessingState("complete");
+    try {
+      const response = await supabase.functions.invoke("extract-entities", {
+        body: { content: textContent },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || "Extraction failed");
+      }
+
+      if (!response.data) {
+        throw new Error("No data returned from extraction");
+      }
+
+      setExtractionResult(response.data as ExtractionResult);
+      setProcessingState("complete");
+      toast.success("Extraction complete!");
+    } catch (error) {
+      console.error("Extraction error:", error);
+      toast.error(`Extraction failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setProcessingState("error");
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (max 20MB)
     if (file.size > 20 * 1024 * 1024) {
       toast.error("File too large. Maximum size is 20MB.");
       return;
     }
 
     setUploadedFile({ name: file.name, extracting: true });
+    setSourceType("file");
 
     try {
-      // Handle text files directly
       if (file.type === "text/plain" || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
         const text = await file.text();
         setTextContent(text);
@@ -110,15 +109,11 @@ export default function Ingest() {
         return;
       }
 
-      // Handle PDF files via edge function
       if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
         const formData = new FormData();
         formData.append("file", file);
 
-        const { data: { publicUrl } } = supabase.storage.from("temp").getPublicUrl("dummy");
-        const baseUrl = publicUrl.replace("/storage/v1/object/public/temp/dummy", "");
-        
-        const response = await fetch(`${baseUrl}/functions/v1/extract-pdf`, {
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-pdf`, {
           method: "POST",
           body: formData,
         });
@@ -142,7 +137,6 @@ export default function Ingest() {
         return;
       }
 
-      // Unsupported file type
       toast.error("Unsupported file type. Please upload a .txt, .md, or .pdf file.");
       setUploadedFile(null);
     } catch (error) {
@@ -152,19 +146,160 @@ export default function Ingest() {
     }
   };
 
+  const handleCommit = async () => {
+    if (!extractionResult) return;
 
-  const handleCommit = () => {
-    console.log("Committing to truth:", extractionResult);
-    // TODO: Save to database
-    setTextContent("");
-    setExtractionResult(null);
-    setProcessingState("idle");
+    setProcessingState("committing");
+
+    try {
+      // 1. Save the source
+      const { error: sourceError } = await supabase
+        .from("sources")
+        .insert({
+          type: sourceType,
+          raw_content: textContent,
+          processed_content: extractionResult.summary,
+        });
+
+      if (sourceError) {
+        console.error("Source save error:", sourceError);
+      }
+
+      // 2. Create persons (check for existing by name pattern)
+      const personIds: string[] = [];
+      for (const person of extractionResult.people) {
+        // Generate email from name (simple pattern)
+        const email = `${person.name.toLowerCase().replace(/\s+/g, ".")}@placeholder.com`;
+        
+        // Check if person exists
+        const { data: existing } = await supabase
+          .from("persons")
+          .select("id")
+          .eq("email", email)
+          .maybeSingle();
+
+        if (existing) {
+          personIds.push(existing.id);
+        } else {
+          const { data: newPerson, error: personError } = await supabase
+            .from("persons")
+            .insert({
+              name: person.name,
+              email,
+              role: person.role,
+            })
+            .select("id")
+            .single();
+
+          if (personError) {
+            console.error("Person save error:", personError);
+          } else if (newPerson) {
+            personIds.push(newPerson.id);
+            
+            // Log event
+            await supabase.from("events").insert({
+              entity_type: "person",
+              entity_id: newPerson.id,
+              event_type: "created",
+              metadata: { name: person.name },
+            });
+          }
+        }
+      }
+
+      // 3. Create projects (check for existing by name)
+      for (const project of extractionResult.projects) {
+        const { data: existing } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("name", project.name)
+          .maybeSingle();
+
+        if (!existing) {
+          const { data: newProject, error: projectError } = await supabase
+            .from("projects")
+            .insert({
+              name: project.name,
+              description: project.description,
+              status: "active",
+            })
+            .select("id")
+            .single();
+
+          if (projectError) {
+            console.error("Project save error:", projectError);
+          } else if (newProject) {
+            await supabase.from("events").insert({
+              entity_type: "project",
+              entity_id: newProject.id,
+              event_type: "created",
+              metadata: { name: project.name },
+            });
+          }
+        }
+      }
+
+      // 4. Create decisions with version 1
+      let decisionsCreated = 0;
+      for (const decision of extractionResult.decisions) {
+        const { data: newDecision, error: decisionError } = await supabase
+          .from("decisions")
+          .insert({
+            title: decision.title,
+            description: decision.description,
+            rationale: decision.rationale || null,
+            status: "draft",
+          })
+          .select("id")
+          .single();
+
+        if (decisionError) {
+          console.error("Decision save error:", decisionError);
+        } else if (newDecision) {
+          decisionsCreated++;
+
+          // Create version 1
+          await supabase.from("decision_versions").insert({
+            decision_id: newDecision.id,
+            version: 1,
+            content: { title: decision.title, description: decision.description },
+            change_summary: "Initial version",
+          });
+
+          // Log event
+          await supabase.from("events").insert({
+            entity_type: "decision",
+            entity_id: newDecision.id,
+            event_type: "created",
+            metadata: { title: decision.title },
+          });
+        }
+      }
+
+      const peopleCreated = extractionResult.people.length;
+      const projectsCreated = extractionResult.projects.length;
+
+      toast.success(
+        `Committed: ${decisionsCreated} decisions, ${peopleCreated} people, ${projectsCreated} projects`
+      );
+
+      // Reset and navigate to ledger
+      setTextContent("");
+      setExtractionResult(null);
+      setProcessingState("idle");
+      navigate("/ledger");
+    } catch (error) {
+      console.error("Commit error:", error);
+      toast.error(`Failed to commit: ${error instanceof Error ? error.message : "Unknown error"}`);
+      setProcessingState("complete");
+    }
   };
 
   const handleReset = () => {
     setTextContent("");
     setExtractionResult(null);
     setProcessingState("idle");
+    setSourceType("text");
   };
 
   return (
@@ -191,7 +326,7 @@ export default function Ingest() {
             <div className="flex gap-2">
               <Button
                 variant={mode === "text" ? "default" : "outline"}
-                onClick={() => setMode("text")}
+                onClick={() => { setMode("text"); setSourceType("text"); }}
                 className="gap-2"
               >
                 <FileText className="h-4 w-4" />
@@ -326,7 +461,7 @@ export default function Ingest() {
             <div className="flex gap-2">
               <Button
                 onClick={handleProcess}
-                disabled={!textContent.trim() || processingState === "processing"}
+                disabled={!textContent.trim() || processingState === "processing" || processingState === "committing"}
                 className="gap-2"
               >
                 {processingState === "processing" ? (
@@ -367,67 +502,106 @@ export default function Ingest() {
                 </Card>
 
                 {/* Decisions */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      Decisions Found ({extractionResult.decisions.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {extractionResult.decisions.map((decision, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border bg-muted/25 p-3"
-                      >
-                        <p className="font-medium">{decision.title}</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {decision.description}
-                        </p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+                {extractionResult.decisions.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        Decisions Found ({extractionResult.decisions.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {extractionResult.decisions.map((decision, i) => (
+                        <div
+                          key={i}
+                          className="rounded-lg border bg-muted/25 p-3"
+                        >
+                          <p className="font-medium">{decision.title}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {decision.description}
+                          </p>
+                          {decision.rationale && (
+                            <p className="mt-2 text-xs text-muted-foreground/80 italic">
+                              Rationale: {decision.rationale}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* People */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      People Mentioned ({extractionResult.people.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {extractionResult.people.map((person, i) => (
-                        <Badge key={i} variant="secondary">
-                          {person.name} · {person.role}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                {extractionResult.people.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        People Mentioned ({extractionResult.people.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {extractionResult.people.map((person, i) => (
+                          <Badge key={i} variant="secondary">
+                            {person.name} · {person.role}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Projects */}
+                {extractionResult.projects.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        Projects Found ({extractionResult.projects.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {extractionResult.projects.map((project, i) => (
+                          <Badge key={i} variant="outline">
+                            {project.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Stakeholders */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      Suggested Stakeholders
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {extractionResult.suggested_stakeholders.map((s, i) => (
-                        <Badge key={i} variant="outline">
-                          {s}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                {extractionResult.suggested_stakeholders.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        Suggested Stakeholders
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {extractionResult.suggested_stakeholders.map((s, i) => (
+                          <Badge key={i} variant="outline">
+                            {s}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Commit Button */}
-                <Button onClick={handleCommit} className="w-full gap-2">
-                  <CheckCircle className="h-4 w-4" />
-                  Commit to Truth
+                <Button 
+                  onClick={handleCommit} 
+                  disabled={processingState === "committing"}
+                  className="w-full gap-2"
+                >
+                  {processingState === "committing" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                  {processingState === "committing" ? "Saving..." : "Commit to Truth"}
                 </Button>
               </motion.div>
             )}

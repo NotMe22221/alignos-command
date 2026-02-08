@@ -12,7 +12,9 @@ import {
   FileText,
   BookOpen,
   Sparkles,
+  Loader2,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,14 +27,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { Decision, DecisionVersion } from "@/types/entities";
+import { useDecisions, type DecisionWithMeta } from "@/hooks/useDecisions";
+import type { Tables } from "@/integrations/supabase/types";
 
-type DecisionWithMeta = Decision & {
-  versions: DecisionVersion[];
-  acknowledgments: { total: number; acknowledged: number };
-};
+type DecisionStatus = Tables<"decisions">["status"];
 
-const statusStyles: Record<Decision["status"], { color: string; bg: string }> = {
+const statusStyles: Record<DecisionStatus, { color: string; bg: string }> = {
   draft: { color: "text-muted-foreground", bg: "bg-muted" },
   active: { color: "text-update", bg: "bg-update/10" },
   superseded: { color: "text-pending", bg: "bg-pending/10" },
@@ -40,12 +40,11 @@ const statusStyles: Record<Decision["status"], { color: string; bg: string }> = 
 };
 
 export default function Ledger() {
+  const navigate = useNavigate();
+  const { decisions, isLoading, error } = useDecisions();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDecision, setSelectedDecision] = useState<DecisionWithMeta | null>(null);
-  const [statusFilter, setStatusFilter] = useState<Decision["status"] | "all">("all");
-
-  // Empty state - no mock data
-  const decisions: DecisionWithMeta[] = [];
+  const [statusFilter, setStatusFilter] = useState<DecisionStatus | "all">("all");
 
   const filteredDecisions = decisions.filter((d) => {
     const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -73,7 +72,7 @@ export default function Ledger() {
                 <BookOpen className="h-5 w-5 text-primary" />
                 <h1 className="text-lg font-semibold tracking-tight">Decision Ledger</h1>
               </div>
-              <Button size="sm" className="gap-1.5 shadow-sm">
+              <Button size="sm" className="gap-1.5 shadow-sm" onClick={() => navigate("/ingest")}>
                 <Plus className="h-3.5 w-3.5" />
                 New Decision
               </Button>
@@ -114,7 +113,16 @@ export default function Ledger() {
 
           {/* List */}
           <div className="flex-1 overflow-y-auto">
-            {filteredDecisions.length > 0 ? (
+            {isLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : error ? (
+              <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+                <p className="text-sm text-destructive">Failed to load decisions</p>
+                <p className="mt-1 text-xs text-muted-foreground">{error.message}</p>
+              </div>
+            ) : filteredDecisions.length > 0 ? (
               filteredDecisions.map((decision, index) => (
                 <motion.button
                   key={decision.id}
@@ -146,7 +154,7 @@ export default function Ledger() {
                       {decision.status}
                     </Badge>
                     <span className="text-xs text-muted-foreground/70">
-                      v{decision.versions.length}
+                      v{decision.versions.length || 1}
                     </span>
                     <span className="text-muted-foreground/30">·</span>
                     <span className="text-xs text-muted-foreground/70">
@@ -164,7 +172,7 @@ export default function Ledger() {
                 <p className="mb-4 text-xs text-muted-foreground">
                   Create your first decision to start<br />building your organizational memory
                 </p>
-                <Button size="sm" variant="outline" className="gap-1.5">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => navigate("/ingest")}>
                   <Plus className="h-3.5 w-3.5" />
                   New Decision
                 </Button>
@@ -245,7 +253,7 @@ export default function Ledger() {
                         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                           Version
                         </p>
-                        <p className="text-sm font-medium">{selectedDecision.versions.length}</p>
+                        <p className="text-sm font-medium">{selectedDecision.versions.length || 1}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -284,43 +292,45 @@ export default function Ledger() {
                 )}
 
                 {/* Version History */}
-                <Card className="border-border/50 bg-card/50">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                      <GitCommit className="h-4 w-4 text-primary" />
-                      Version History
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-1">
-                      {selectedDecision.versions.map((version, index) => (
-                        <div
-                          key={version.id}
-                          className="flex items-start gap-3"
-                        >
-                          <div className="flex flex-col items-center">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/80 text-xs font-medium">
-                              {version.version}
+                {selectedDecision.versions.length > 0 && (
+                  <Card className="border-border/50 bg-card/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                        <GitCommit className="h-4 w-4 text-primary" />
+                        Version History
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-1">
+                        {selectedDecision.versions.map((version, index) => (
+                          <div
+                            key={version.id}
+                            className="flex items-start gap-3"
+                          >
+                            <div className="flex flex-col items-center">
+                              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted/80 text-xs font-medium">
+                                {version.version}
+                              </div>
+                              {index < selectedDecision.versions.length - 1 && (
+                                <div className="h-6 w-px bg-border/50" />
+                              )}
                             </div>
-                            {index < selectedDecision.versions.length - 1 && (
-                              <div className="h-6 w-px bg-border/50" />
-                            )}
-                          </div>
-                          <div className="flex-1 pb-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">
-                                {formatDate(version.changed_at)}
-                              </span>
+                            <div className="flex-1 pb-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDate(version.changed_at)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground/80">
+                                {version.change_summary || "No summary"}
+                              </p>
                             </div>
-                            <p className="text-sm text-foreground/80">
-                              {version.change_summary}
-                            </p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </motion.div>
             ) : (
               <motion.div
@@ -338,15 +348,13 @@ export default function Ledger() {
                   Create decisions from the Ingest page or add them manually.
                 </p>
                 <div className="flex gap-3">
-                  <Button variant="outline" size="sm" className="gap-1.5">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigate("/ingest")}>
                     <Plus className="h-3.5 w-3.5" />
                     New Decision
                   </Button>
-                  <Button size="sm" className="gap-1.5" asChild>
-                    <a href="/ingest">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Go to Ingest
-                    </a>
+                  <Button size="sm" className="gap-1.5" onClick={() => navigate("/ingest")}>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Go to Ingest
                   </Button>
                 </div>
               </motion.div>
