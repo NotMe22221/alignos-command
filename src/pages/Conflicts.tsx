@@ -20,6 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { useConflicts } from "@/hooks/useConflicts";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 
 type ConflictType = Tables<"conflicts">["type"];
@@ -54,26 +56,35 @@ function ConflictCard({
   const status = statusConfig[conflict.status];
 
   return (
-    <div
+    <motion.div
+      whileHover={{ x: 2 }}
       onClick={onClick}
-      className={`cursor-pointer border-b p-4 transition-colors hover:bg-muted/50 ${
-        isSelected ? "bg-muted" : ""
-      }`}
+      className={cn(
+        "cursor-pointer border-b border-border/30 border-l-2 p-4 transition-all hover:bg-muted/50",
+        isSelected ? "bg-muted border-l-primary" : `border-l-transparent hover:border-l-${config.color.replace('text-', '')}`
+      )}
     >
       <div className="mb-2 flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 ${config.color}`} />
+          <div className={cn(
+            "flex h-7 w-7 items-center justify-center rounded-lg",
+            config.color.replace('text-', 'bg-') + '/10'
+          )}>
+            <Icon className={cn("h-4 w-4", config.color)} />
+          </div>
           <span className="text-sm font-medium">{config.label}</span>
         </div>
-        <Badge variant={status.variant}>{status.label}</Badge>
+        <Badge variant={status.variant} className="text-[10px] uppercase tracking-wide">
+          {status.label}
+        </Badge>
       </div>
       <p className="line-clamp-2 text-sm text-muted-foreground">
         {conflict.description}
       </p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {new Date(conflict.created_at).toLocaleDateString()}
+      <p className="mt-2 text-[11px] text-muted-foreground/70">
+        {formatDistanceToNow(new Date(conflict.created_at), { addSuffix: true })}
       </p>
-    </div>
+    </motion.div>
   );
 }
 

@@ -13,11 +13,11 @@ import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { usePropagationData, type PropagationItem } from "@/hooks/usePropagationData";
 import { useDecisions } from "@/hooks/useDecisions";
+import { cn } from "@/lib/utils";
 
 function PropagationCard({ item }: { item: PropagationItem }) {
   const progress = item.totalStakeholders > 0 
@@ -25,54 +25,83 @@ function PropagationCard({ item }: { item: PropagationItem }) {
     : 0;
   
   const getStatus = () => {
-    if (item.totalStakeholders === 0) return { label: "No Stakeholders", color: "bg-muted" };
-    if (item.acknowledged === item.totalStakeholders) return { label: "Complete", color: "bg-update" };
-    if (item.acknowledged > 0) return { label: "In Progress", color: "bg-info" };
-    return { label: "Pending", color: "bg-conflict" };
+    if (item.totalStakeholders === 0) return { label: "No Stakeholders", color: "bg-muted", textColor: "text-muted-foreground" };
+    if (item.acknowledged === item.totalStakeholders) return { label: "Complete", color: "bg-update", textColor: "text-update" };
+    if (item.acknowledged > 0) return { label: "In Progress", color: "bg-info", textColor: "text-info" };
+    return { label: "Pending", color: "bg-conflict", textColor: "text-conflict" };
   };
 
   const status = getStatus();
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <FileText className="h-5 w-5 text-primary" />
+    <motion.div
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.2 }}
+    >
+      <Card className="border-border/50 shadow-soft-sm transition-shadow hover:shadow-soft-md overflow-hidden">
+        <CardContent className="p-4">
+          <div className="mb-3 flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                <FileText className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-medium">{item.decision.title}</h3>
+                <p className="text-xs text-muted-foreground">
+                  {item.acknowledged} of {item.totalStakeholders} acknowledged
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-medium">{item.decision.title}</h3>
-              <p className="text-xs text-muted-foreground">
-                {item.acknowledged} of {item.totalStakeholders} acknowledged
-              </p>
+            <Badge variant="secondary" className={cn("text-[10px] uppercase tracking-wide", status.color, status.textColor)}>
+              {status.label}
+            </Badge>
+          </div>
+
+          {/* Gradient progress bar */}
+          <div className="relative mb-3 h-2 w-full overflow-hidden rounded-full bg-muted">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className={cn(
+                "absolute inset-y-0 left-0 rounded-full",
+                progress === 100 ? "bg-gradient-to-r from-update to-update/80" : "bg-gradient-to-r from-primary to-primary/80"
+              )}
+            />
+          </div>
+
+          {item.stakeholders.length > 0 && (
+            <div className="flex items-center gap-1">
+              {item.stakeholders.slice(0, 5).map((s, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <Avatar className={cn(
+                    "h-7 w-7 border-2 border-background transition-transform hover:scale-110",
+                    i > 0 && "-ml-2"
+                  )}>
+                    <AvatarFallback className={cn(
+                      "text-[10px] font-medium",
+                      s.acknowledgedAt ? 'bg-update/20 text-update' : 'bg-muted text-muted-foreground'
+                    )}>
+                      {s.person?.name?.substring(0, 2).toUpperCase() || "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                </motion.div>
+              ))}
+              {item.stakeholders.length > 5 && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  +{item.stakeholders.length - 5} more
+                </span>
+              )}
             </div>
-          </div>
-          <Badge variant="secondary" className={status.color}>
-            {status.label}
-          </Badge>
-        </div>
-
-        <Progress value={progress} className="mb-3 h-2" />
-
-        {item.stakeholders.length > 0 && (
-          <div className="flex items-center gap-1">
-            {item.stakeholders.slice(0, 5).map((s, i) => (
-              <Avatar key={i} className="h-6 w-6 border-2 border-background">
-                <AvatarFallback className={`text-[10px] ${s.acknowledgedAt ? 'bg-update text-update-foreground' : 'bg-muted'}`}>
-                  {s.person?.name?.substring(0, 2).toUpperCase() || "?"}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-            {item.stakeholders.length > 5 && (
-              <span className="ml-1 text-xs text-muted-foreground">
-                +{item.stakeholders.length - 5} more
-              </span>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }
 

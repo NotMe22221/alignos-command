@@ -10,6 +10,31 @@ interface VoiceAgentProps {
   onMessage?: (message: string, isUser: boolean) => void;
 }
 
+// Waveform visualization component
+function Waveform({ isActive }: { isActive: boolean }) {
+  return (
+    <div className="flex items-center justify-center gap-1 h-6">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <motion.div
+          key={i}
+          className="w-1 bg-primary-foreground rounded-full"
+          animate={isActive ? {
+            height: ["8px", "20px", "8px"],
+          } : {
+            height: "8px"
+          }}
+          transition={{
+            duration: 0.5,
+            repeat: isActive ? Infinity : 0,
+            delay: i * 0.1,
+            ease: "easeInOut"
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function VoiceAgent({ className, onMessage }: VoiceAgentProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,20 +120,27 @@ export function VoiceAgent({ className, onMessage }: VoiceAgentProps) {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
-        "relative flex flex-col items-center gap-6 rounded-2xl border bg-card p-8",
+        "relative flex flex-col items-center gap-6 rounded-2xl border border-border/50 bg-card p-8",
         className
       )}
     >
-      {/* Status indicator */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      {/* Status indicator with better styling */}
+      <div className={cn(
+        "flex items-center gap-2.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+        isConnected
+          ? isSpeaking
+            ? "bg-primary/10 text-primary"
+            : "bg-success/10 text-success"
+          : "bg-muted text-muted-foreground"
+      )}>
         <div
           className={cn(
             "h-2 w-2 rounded-full transition-colors",
             isConnected
               ? isSpeaking
-                ? "animate-pulse bg-primary"
+                ? "animate-pulse-soft bg-primary"
                 : "bg-success"
-              : "bg-muted"
+              : "bg-muted-foreground/50"
           )}
         />
         <span>
@@ -122,37 +154,52 @@ export function VoiceAgent({ className, onMessage }: VoiceAgentProps) {
         </span>
       </div>
 
-      {/* Visual feedback ring */}
-      <div className="relative">
+      {/* Visual feedback with multiple concentric rings */}
+      <div className="relative flex items-center justify-center">
+        {/* Concentric rings */}
         <AnimatePresence>
           {isConnected && (
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{
-                scale: isSpeaking ? [1, 1.2, 1] : 1,
-                opacity: 1,
-              }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{
-                scale: {
-                  duration: 0.6,
-                  repeat: isSpeaking ? Infinity : 0,
-                  ease: "easeInOut",
-                },
-              }}
-              className="absolute inset-0 -m-4 rounded-full bg-primary/20"
-            />
+            <>
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                className="absolute h-32 w-32 rounded-full border-2 border-primary/10 ring-pulse"
+              />
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                className="absolute h-32 w-32 rounded-full border-2 border-primary/10 ring-pulse-delay-1"
+              />
+              {isSpeaking && (
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  className="absolute h-32 w-32 rounded-full border-2 border-primary/10 ring-pulse-delay-2"
+                />
+              )}
+            </>
           )}
         </AnimatePresence>
 
+        {/* Main orb */}
         <motion.div
           animate={{
-            scale: isConnected ? (isSpeaking ? 1.05 : 1) : 1,
+            scale: isConnected ? (isSpeaking ? [1, 1.05, 1] : 1) : 1,
+          }}
+          transition={{
+            scale: {
+              duration: 0.6,
+              repeat: isSpeaking ? Infinity : 0,
+              ease: "easeInOut",
+            },
           }}
           className={cn(
-            "relative flex h-24 w-24 items-center justify-center rounded-full transition-colors",
+            "relative flex h-24 w-24 items-center justify-center rounded-full transition-all duration-300",
             isConnected
-              ? "bg-primary text-primary-foreground"
+              ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/25"
               : "bg-muted text-muted-foreground"
           )}
         >
@@ -160,7 +207,7 @@ export function VoiceAgent({ className, onMessage }: VoiceAgentProps) {
             <Loader2 className="h-10 w-10 animate-spin" />
           ) : isConnected ? (
             isSpeaking ? (
-              <Volume2 className="h-10 w-10" />
+              <Waveform isActive={isSpeaking} />
             ) : (
               <Mic className="h-10 w-10" />
             )
@@ -173,24 +220,27 @@ export function VoiceAgent({ className, onMessage }: VoiceAgentProps) {
       {/* Error message */}
       <AnimatePresence>
         {error && (
-          <motion.p
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="text-sm text-destructive"
+            className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
           >
             {error}
-          </motion.p>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Action button */}
+      {/* Action button with improved styling */}
       <Button
         size="lg"
         variant={isConnected ? "destructive" : "default"}
         onClick={isConnected ? stopConversation : startConversation}
         disabled={isConnecting}
-        className="gap-2"
+        className={cn(
+          "gap-2 rounded-xl px-6 transition-all duration-200",
+          !isConnected && "shadow-soft-sm hover:shadow-soft-md"
+        )}
       >
         {isConnected ? (
           <>

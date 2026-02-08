@@ -322,28 +322,37 @@ export default function Ingest() {
         <div className="grid gap-8 lg:grid-cols-2">
           {/* Input Section */}
           <div className="space-y-6">
-            {/* Mode Selector */}
-            <div className="flex gap-2">
+            {/* Mode Selector with pill indicator */}
+            <div className="inline-flex gap-1 rounded-xl border border-border/50 bg-muted/30 p-1">
               <Button
-                variant={mode === "text" ? "default" : "outline"}
+                variant={mode === "text" ? "default" : "ghost"}
                 onClick={() => { setMode("text"); setSourceType("text"); }}
-                className="gap-2"
+                className={cn(
+                  "gap-2 rounded-lg transition-all",
+                  mode === "text" ? "shadow-soft-xs" : "hover:bg-background/50"
+                )}
               >
                 <FileText className="h-4 w-4" />
                 Text
               </Button>
               <Button
-                variant={mode === "file" ? "default" : "outline"}
+                variant={mode === "file" ? "default" : "ghost"}
                 onClick={() => setMode("file")}
-                className="gap-2"
+                className={cn(
+                  "gap-2 rounded-lg transition-all",
+                  mode === "file" ? "shadow-soft-xs" : "hover:bg-background/50"
+                )}
               >
                 <Upload className="h-4 w-4" />
                 Upload
               </Button>
               <Button
-                variant={mode === "voice" ? "default" : "outline"}
+                variant={mode === "voice" ? "default" : "ghost"}
                 onClick={() => setMode("voice")}
-                className="gap-2"
+                className={cn(
+                  "gap-2 rounded-lg transition-all",
+                  mode === "voice" ? "shadow-soft-xs" : "hover:bg-background/50"
+                )}
               >
                 <Mic className="h-4 w-4" />
                 Voice
@@ -363,7 +372,7 @@ export default function Ingest() {
                     value={textContent}
                     onChange={(e) => setTextContent(e.target.value)}
                     placeholder="Paste meeting notes, transcripts, or any text content..."
-                    className="min-h-[300px] resize-none"
+                    className="min-h-[300px] resize-none rounded-xl border-border/50 focus-glow"
                   />
                 </MotionDiv>
               )}
@@ -376,7 +385,7 @@ export default function Ingest() {
                   exit={{ opacity: 0, y: -10 }}
                 >
                   {uploadedFile ? (
-                    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-lg border bg-muted/25">
+                    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-border/50 bg-muted/25">
                       <div className="mb-4 flex items-center gap-3">
                         <File className="h-8 w-8 text-primary" />
                         <span className="font-medium">{uploadedFile.name}</span>
@@ -394,8 +403,13 @@ export default function Ingest() {
                       )}
                     </div>
                   ) : (
-                    <label className="flex min-h-[300px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/25 transition-colors hover:border-muted-foreground/50 hover:bg-muted/50">
-                      <Upload className="mb-4 h-10 w-10 text-muted-foreground" />
+                    <label className="group flex min-h-[300px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/25 transition-all hover:border-primary/50 hover:bg-muted/50">
+                      <motion.div
+                        animate={{ y: [0, -4, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      >
+                        <Upload className="mb-4 h-10 w-10 text-muted-foreground transition-colors group-hover:text-primary" />
+                      </motion.div>
                       <p className="mb-1 text-sm font-medium">
                         Drop files here or click to upload
                       </p>
@@ -419,28 +433,37 @@ export default function Ingest() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="flex min-h-[300px] flex-col items-center justify-center rounded-lg border bg-muted/25"
+                  className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-border/50 bg-muted/25"
                 >
-                  <button
-                    onClick={toggleRecording}
-                    disabled={isTranscribing}
-                    className={cn(
-                      "mb-6 flex h-24 w-24 items-center justify-center rounded-full transition-all",
-                      isTranscribing
-                        ? "bg-muted text-muted-foreground"
-                        : isRecording
-                        ? "animate-pulse bg-destructive text-destructive-foreground"
-                        : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  {/* Concentric rings */}
+                  <div className="relative mb-6">
+                    {isRecording && (
+                      <>
+                        <div className="absolute inset-0 -m-4 rounded-full border-2 border-destructive/20 ring-pulse" />
+                        <div className="absolute inset-0 -m-4 rounded-full border-2 border-destructive/20 ring-pulse-delay-1" />
+                      </>
                     )}
-                  >
-                    {isTranscribing ? (
-                      <Loader2 className="h-10 w-10 animate-spin" />
-                    ) : isRecording ? (
-                      <MicOff className="h-10 w-10" />
-                    ) : (
-                      <Mic className="h-10 w-10" />
-                    )}
-                  </button>
+                    <button
+                      onClick={toggleRecording}
+                      disabled={isTranscribing}
+                      className={cn(
+                        "relative flex h-24 w-24 items-center justify-center rounded-full transition-all",
+                        isTranscribing
+                          ? "bg-muted text-muted-foreground"
+                          : isRecording
+                          ? "bg-destructive text-destructive-foreground shadow-lg shadow-destructive/25"
+                          : "bg-primary text-primary-foreground shadow-soft-md hover:shadow-soft-lg hover:scale-105"
+                      )}
+                    >
+                      {isTranscribing ? (
+                        <Loader2 className="h-10 w-10 animate-spin" />
+                      ) : isRecording ? (
+                        <MicOff className="h-10 w-10" />
+                      ) : (
+                        <Mic className="h-10 w-10" />
+                      )}
+                    </button>
+                  </div>
                   <p className="text-sm font-medium">
                     {isTranscribing
                       ? "Transcribing..."
@@ -462,7 +485,7 @@ export default function Ingest() {
               <Button
                 onClick={handleProcess}
                 disabled={!textContent.trim() || processingState === "processing" || processingState === "committing"}
-                className="gap-2"
+                className="gap-2 rounded-xl shadow-soft-xs hover:shadow-soft-sm"
               >
                 {processingState === "processing" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -472,7 +495,7 @@ export default function Ingest() {
                 {processingState === "processing" ? "Processing..." : "Extract with AI"}
               </Button>
               {(textContent || extractionResult) && (
-                <Button variant="ghost" onClick={handleReset}>
+                <Button variant="ghost" onClick={handleReset} className="rounded-xl">
                   <X className="h-4 w-4" />
                 </Button>
               )}

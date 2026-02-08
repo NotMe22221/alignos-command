@@ -23,6 +23,7 @@ import { ForceGraph } from "@/components/graph/ForceGraph";
 import { useGraphData, type GraphNode } from "@/hooks/useGraphData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import type { EntityType } from "@/types/entities";
 
 const nodeColors: Record<string, string> = {
@@ -133,33 +134,37 @@ export default function Graph() {
     <AppLayout>
       <div className="flex h-[calc(100vh-1px)] flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-8 py-4">
+        <div className="flex items-center justify-between border-b border-border/50 bg-card/50 px-8 py-4 backdrop-blur-sm">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               Knowledge Graph
             </h1>
             <p className="text-sm text-muted-foreground">
-              {graphData?.nodes.length || 0} entities • {graphData?.links.length || 0} connections
+              <span className="font-medium text-foreground">{graphData?.nodes.length || 0}</span> entities •{" "}
+              <span className="font-medium text-foreground">{graphData?.links.length || 0}</span> connections
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search entities..."
-                className="w-64 pl-9"
+                className="w-64 rounded-xl border-border/50 bg-background/50 pl-9 focus-glow"
               />
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-1 rounded-xl border border-border/50 bg-muted/30 p-1">
               {(["all", "person", "team", "project", "decision"] as const).map((type) => (
                 <Button
                   key={type}
-                  variant={filter === type ? "default" : "outline"}
+                  variant={filter === type ? "default" : "ghost"}
                   size="sm"
                   onClick={() => setFilter(type)}
-                  className="capitalize"
+                  className={cn(
+                    "h-8 rounded-lg capitalize transition-all",
+                    filter === type ? "shadow-soft-xs" : "hover:bg-background/50"
+                  )}
                 >
                   {type}
                 </Button>
