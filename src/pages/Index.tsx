@@ -33,6 +33,7 @@ import { useConflicts } from "@/hooks/useConflicts";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 
 const activityIcons: Record<string, typeof FileText> = {
   decision: FileText,
@@ -48,6 +49,22 @@ const eventLabels: Record<string, string> = {
   acknowledged: "acknowledged",
   conflict_detected: "flagged a conflict in",
 };
+
+const activityColors: Record<string, string> = {
+  created: "border-l-update",
+  updated: "border-l-info",
+  deleted: "border-l-destructive",
+  acknowledged: "border-l-success",
+  conflict_detected: "border-l-conflict",
+};
+
+// Get time-based greeting
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 export default function Index() {
   const navigate = useNavigate();
@@ -157,7 +174,7 @@ export default function Index() {
           onChange={handleFileChange}
         />
 
-        {/* Header */}
+        {/* Header with greeting */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -165,6 +182,9 @@ export default function Index() {
         >
           <div className="flex items-center justify-between">
             <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">
+                {getGreeting()}
+              </p>
               <h1 className="text-2xl font-semibold tracking-tight">
                 Command Center
               </h1>
@@ -174,7 +194,7 @@ export default function Index() {
             </div>
             <Button 
               variant="outline" 
-              className="gap-2"
+              className="gap-2 rounded-xl border-border/50 shadow-soft-xs hover:shadow-soft-sm transition-all gradient-border"
               onClick={handleWhatChangedToday}
             >
               <Volume2 className="h-4 w-4" />
@@ -192,7 +212,7 @@ export default function Index() {
           onUpload={handleUpload}
           isRecording={isRecording}
           isTranscribing={isTranscribing || isQuerying}
-          placeholder={isQuerying ? "Thinking..." : "Ask AlignOS anything..."}
+          placeholder={isQuerying ? "Thinking..." : undefined}
           className="mb-4"
         />
 
@@ -203,18 +223,18 @@ export default function Index() {
             animate={{ opacity: 1, y: 0 }}
             className="mb-8"
           >
-            <Card className="border-primary/20 bg-primary/5">
+            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent overflow-hidden">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-primary/10 p-2">
+                  <div className="rounded-xl bg-primary/10 p-2.5">
                     <Sparkles className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm leading-relaxed">{aiResponse}</p>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="mt-2 h-7 px-2 text-xs"
+                      className="mt-2 h-7 px-2 text-xs hover:bg-primary/5"
                       onClick={() => setAiResponse(null)}
                     >
                       Dismiss
@@ -233,12 +253,14 @@ export default function Index() {
             value={todayDecisions.length}
             subtitle={todayDecisions.length === 0 ? "No decisions yet" : `${todayDecisions.length} new today`}
             icon={<FileText className="h-5 w-5 text-muted-foreground" />}
+            trend={todayDecisions.length > 0 ? "up" : "neutral"}
           />
           <MetricCard
             title="Conflicts Detected"
             value={pendingConflicts.length}
             subtitle={pendingConflicts.length === 0 ? "All clear" : `${pendingConflicts.length} need review`}
-            icon={<AlertTriangle className="h-5 w-5 text-muted-foreground" />}
+            icon={<AlertTriangle className="h-5 w-5 text-conflict" />}
+            variant={pendingConflicts.length > 0 ? "conflict" : "default"}
           />
           <MetricCard
             title="Total Decisions"
@@ -250,20 +272,24 @@ export default function Index() {
             title="Ownership Gaps"
             value={0}
             subtitle="Fully assigned"
-            icon={<Users className="h-5 w-5 text-muted-foreground" />}
+            icon={<Users className="h-5 w-5 text-update" />}
+            variant="success"
           />
         </div>
 
         {/* Two Column Layout */}
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Activity Feed */}
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
+          <Card className="lg:col-span-2 border-border/50 shadow-soft-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-4">
               <CardTitle className="text-base font-medium">
                 Recent Activity
               </CardTitle>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-update" />
+              <div className="flex items-center gap-2 rounded-full bg-update/10 px-2.5 py-1 text-xs font-medium text-update">
+                <div className="relative flex h-2 w-2 items-center justify-center">
+                  <div className="absolute h-2 w-2 animate-ping rounded-full bg-update/50" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-update" />
+                </div>
                 Live
               </div>
             </CardHeader>
@@ -291,7 +317,7 @@ export default function Index() {
                   <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
                     Start by ingesting documents, adding decisions, or importing your organizational data.
                   </p>
-                  <Button className="gap-2" onClick={() => navigate("/ingest")}>
+                  <Button className="gap-2 rounded-xl" onClick={() => navigate("/ingest")}>
                     Get Started
                     <ArrowRight className="h-4 w-4" />
                   </Button>
@@ -301,8 +327,8 @@ export default function Index() {
           </Card>
 
           {/* Voice Agent */}
-          <Card>
-            <CardHeader>
+          <Card className="border-border/50 shadow-soft-sm">
+            <CardHeader className="pb-4">
               <CardTitle className="text-base font-medium">
                 AI Voice Assistant
               </CardTitle>
@@ -342,15 +368,20 @@ export default function Index() {
 function ActivityRow({ activity, index }: { activity: ActivityItem; index: number }) {
   const Icon = activityIcons[activity.entityType] || GitCommit;
   const eventLabel = eventLabels[activity.type] || activity.type;
+  const borderColor = activityColors[activity.type] || "border-l-border";
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.05 }}
-      className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-muted/50"
+      transition={{ delay: index * 0.03 }}
+      className={cn(
+        "group flex items-center gap-3 rounded-lg border-l-2 p-3 transition-all hover:bg-muted/50",
+        borderColor,
+        index % 2 === 0 ? "bg-transparent" : "bg-muted/20"
+      )}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted transition-transform group-hover:scale-105">
         <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
@@ -358,10 +389,11 @@ function ActivityRow({ activity, index }: { activity: ActivityItem; index: numbe
           <span className="capitalize text-muted-foreground">{eventLabel}</span>{" "}
           <span className="font-medium">{activity.entityName}</span>
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground/70">
           {formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true })}
         </p>
       </div>
+      <ArrowRight className="h-4 w-4 text-muted-foreground/0 transition-all group-hover:text-muted-foreground group-hover:translate-x-0.5" />
     </motion.div>
   );
 }
