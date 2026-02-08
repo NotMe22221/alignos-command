@@ -13,13 +13,25 @@ import {
   BookOpen,
   Sparkles,
   Loader2,
+  Edit,
+  Copy,
+  Archive,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +40,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useDecisions, type DecisionWithMeta } from "@/hooks/useDecisions";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 
 type DecisionStatus = Tables<"decisions">["status"];
@@ -41,10 +55,128 @@ const statusStyles: Record<DecisionStatus, { color: string; bg: string }> = {
 
 export default function Ledger() {
   const navigate = useNavigate();
-  const { decisions, isLoading, error } = useDecisions();
+  const { decisions, isLoading, error, refetch } = useDecisions();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDecision, setSelectedDecision] = useState<DecisionWithMeta | null>(null);
   const [statusFilter, setStatusFilter] = useState<DecisionStatus | "all">("all");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ title: "", description: "", rationale: "" });
+
+  const handleEdit = (decision: DecisionWithMeta) => {
+    setEditForm({
+      title: decision.title,
+      description: decision.description,
+      rationale: decision.rationale || "",
+    });
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedDecision) return;
+
+    try {
+      // Update decision
+      const { error: updateError } = await supabase
+        .from("decisions")
+        .update({
+          title: editForm.title,
+          description: editForm.description,
+          rationale: editForm.rationale || null,
+        })
+        .eq("id", selectedDecision.id);
+
+      if (updateError) throw updateError;
+
+      // Create new version
+      const newVersion = (selectedDecision.versions.length || 0) + 1;
+      await supabase.from("decision_versions").insert({
+        decision_id: selectedDecision.id,
+        version: newVersion,
+        content: { title: editForm.title, description: editForm.description },
+        change_summary: "Updated via ledger edit",
+      });
+
+      // Log event
+      await supabase.from("events").insert({
+        entity_type: "decision",
+        entity_id: selectedDecision.id,
+        event_type: "updated",
+        metadata: { version: newVersion },
+      });
+
+      toast.success("Decision updated!");
+      setIsEditing(false);
+      refetch();
+    } catch (error) {
+      console.error("Edit error:", error);
+      toast.error("Failed to update decision");
+    }
+  };
+
+  const handleDuplicate = async (decision: DecisionWithMeta) => {
+    try {
+      const { data: newDecision, error: insertError } = await supabase
+        .from("decisions")
+        .insert({
+          title: `${decision.title} (Copy)`,
+          description: decision.description,
+          rationale: decision.rationale,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Create version 1 for the duplicate
+      await supabase.from("decision_versions").insert({
+        decision_id: newDecision.id,
+        version: 1,
+        content: { title: `${decision.title} (Copy)`, description: decision.description },
+        change_summary: `Duplicated from "${decision.title}"`,
+      });
+
+      // Log event
+      await supabase.from("events").insert({
+        entity_type: "decision",
+        entity_id: newDecision.id,
+        event_type: "created",
+        metadata: { duplicated_from: decision.id },
+      });
+
+      toast.success("Decision duplicated!");
+      refetch();
+    } catch (error) {
+      console.error("Duplicate error:", error);
+      toast.error("Failed to duplicate decision");
+    }
+  };
+
+  const handleDeprecate = async (decision: DecisionWithMeta) => {
+    try {
+      const { error: updateError } = await supabase
+        .from("decisions")
+        .update({ status: "deprecated" })
+        .eq("id", decision.id);
+
+      if (updateError) throw updateError;
+
+      // Log event
+      await supabase.from("events").insert({
+        entity_type: "decision",
+        entity_id: decision.id,
+        event_type: "updated",
+        metadata: { status_changed: "deprecated" },
+      });
+
+      toast.success("Decision deprecated!");
+      setSelectedDecision(null);
+      refetch();
+    } catch (error) {
+      console.error("Deprecate error:", error);
+      toast.error("Failed to deprecate decision");
+    }
+  };
 
   const filteredDecisions = decisions.filter((d) => {
     const matchesSearch = d.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -213,9 +345,32 @@ export default function Ledger() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(selectedDecision);
+                          }}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDuplicate(selectedDecision);
+                          }}
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeprecate(selectedDecision);
+                          }}
+                        >
+                          <Archive className="mr-2 h-4 w-4" />
                           Deprecate
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -362,6 +517,51 @@ export default function Ledger() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Decision</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rationale">Rationale</Label>
+              <Textarea
+                id="rationale"
+                value={editForm.rationale}
+                onChange={(e) => setEditForm({ ...editForm, rationale: e.target.value })}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
