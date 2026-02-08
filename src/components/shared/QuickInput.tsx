@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Send, Mic, Upload, Sparkles } from "lucide-react";
+import { Send, Mic, MicOff, Upload, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,8 @@ interface QuickInputProps {
   onSubmit?: (value: string) => void;
   onVoice?: () => void;
   onUpload?: () => void;
+  isRecording?: boolean;
+  isTranscribing?: boolean;
   className?: string;
 }
 
@@ -17,6 +19,8 @@ export function QuickInput({
   onSubmit,
   onVoice,
   onUpload,
+  isRecording = false,
+  isTranscribing = false,
   className,
 }: QuickInputProps) {
   const [value, setValue] = useState("");
@@ -69,10 +73,22 @@ export function QuickInput({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            className={cn(
+              "h-8 w-8",
+              isRecording 
+                ? "text-destructive animate-pulse" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
             onClick={onVoice}
+            disabled={isTranscribing}
           >
-            <Mic className="h-4 w-4" />
+            {isTranscribing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isRecording ? (
+              <MicOff className="h-4 w-4" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
           </Button>
           <Button
             variant="ghost"
