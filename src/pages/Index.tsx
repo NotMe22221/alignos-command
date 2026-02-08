@@ -12,6 +12,7 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MetricCard } from "@/components/shared/MetricCard";
 import { QuickInput } from "@/components/shared/QuickInput";
+import { VoiceAgent } from "@/components/shared/VoiceAgent";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -126,41 +127,20 @@ export default function Index() {
             </CardContent>
           </Card>
 
-          {/* Quick Stats - Empty State */}
+          {/* Voice Agent */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-medium">
-                Organization Overview
+                AI Voice Assistant
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Total Decisions</span>
-                </div>
-                <span className="font-medium text-muted-foreground">—</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">People Tracked</span>
-                </div>
-                <span className="font-medium text-muted-foreground">—</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Active Projects</span>
-                </div>
-                <span className="font-medium text-muted-foreground">—</span>
-              </div>
-              
-              <div className="mt-6 rounded-lg border border-dashed p-4">
-                <p className="text-center text-xs text-muted-foreground">
-                  Add data to see your organization's health metrics
-                </p>
-              </div>
+            <CardContent>
+              <VoiceAgent 
+                className="border-0 p-0"
+                onMessage={(message, isUser) => {
+                  console.log(isUser ? "User:" : "Agent:", message);
+                }}
+              />
             </CardContent>
           </Card>
         </div>
