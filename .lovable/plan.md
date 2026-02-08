@@ -1,184 +1,158 @@
 
 
-# Database Schema Setup for AlignOS
+# Fix AI Extraction, Database Commits, and Data Display
 
-This plan creates the complete Postgres database structure for persisting organizational data including decisions, people, projects, teams, and all supporting entities.
-
----
-
-## Overview
-
-We'll create 10 core tables that power the AlignOS system:
-
-| Table | Purpose |
-|-------|---------|
-| `teams` | Organizational units (can be hierarchical) |
-| `persons` | People in the organization with roles |
-| `projects` | Initiatives with owners and status |
-| `decisions` | The core decision records |
-| `decision_versions` | Git-style version history for decisions |
-| `documents` | Ingested transcripts, notes, files |
-| `sources` | Raw input tracking (text, voice, file, api) |
-| `events` | Activity log for all entity changes |
-| `relationships` | Graph edges connecting entities |
-| `acknowledgments` | Who has seen/acknowledged decisions |
-| `conflicts` | AI-detected organizational conflicts |
+This plan addresses the core issues: fake AI extraction results, non-functional "Commit to Truth", empty Decision Ledger, and broken "Import Data" on the Knowledge Graph.
 
 ---
 
-## Implementation Steps
+## Problem Summary
 
-### Step 1: Create Enum Types
-Define the custom PostgreSQL enums for status fields:
-- `project_status`: active, completed, on_hold, archived
-- `decision_status`: draft, active, superseded, deprecated
-- `document_type`: transcript, document, notes, email, other
-- `source_type`: text, file, voice, api
-- `event_type`: created, updated, deleted, acknowledged, conflict_detected
-- `entity_type`: person, team, project, decision, document, source
-- `relationship_type`: owns, member_of, depends_on, relates_to, affects, stakeholder
-- `conflict_type`: duplicate, contradiction, timeline_mismatch, ownership_overlap, stale
-- `conflict_status`: detected, reviewing, resolved, dismissed
-
-### Step 2: Create Core Tables
-
-**Teams Table**
-```
-teams (
-  id uuid PRIMARY KEY,
-  name text NOT NULL,
-  description text,
-  parent_team_id uuid REFERENCES teams(id),
-  created_at timestamptz DEFAULT now()
-)
-```
-
-**Persons Table**
-```
-persons (
-  id uuid PRIMARY KEY,
-  name text NOT NULL,
-  email text UNIQUE NOT NULL,
-  role text NOT NULL,
-  team_id uuid REFERENCES teams(id),
-  avatar_url text,
-  created_at timestamptz DEFAULT now()
-)
-```
-
-**Projects Table**
-```
-projects (
-  id uuid PRIMARY KEY,
-  name text NOT NULL,
-  description text NOT NULL,
-  owner_id uuid REFERENCES persons(id),
-  team_id uuid REFERENCES teams(id),
-  status project_status DEFAULT 'active',
-  created_at timestamptz DEFAULT now()
-)
-```
-
-**Decisions Table**
-```
-decisions (
-  id uuid PRIMARY KEY,
-  title text NOT NULL,
-  description text NOT NULL,
-  rationale text,
-  status decision_status DEFAULT 'draft',
-  project_id uuid REFERENCES projects(id),
-  created_by uuid REFERENCES persons(id),
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-)
-```
-
-**Decision Versions Table**
-```
-decision_versions (
-  id uuid PRIMARY KEY,
-  decision_id uuid REFERENCES decisions(id) ON DELETE CASCADE,
-  version integer NOT NULL,
-  content jsonb NOT NULL,
-  changed_by uuid REFERENCES persons(id),
-  changed_at timestamptz DEFAULT now(),
-  change_summary text,
-  UNIQUE(decision_id, version)
-)
-```
-
-### Step 3: Create Supporting Tables
-
-**Documents, Sources, Events, Relationships, Acknowledgments, Conflicts**
-
-Each with appropriate foreign keys and constraints.
-
-### Step 4: Enable Row Level Security
-
-Since this is an organizational tool (not multi-user yet), we'll set up RLS with public read access and authenticated write access. This allows:
-- Anyone can read all organizational data
-- Authenticated users can create/update/delete
-
-### Step 5: Enable Realtime
-
-Enable Supabase Realtime on key tables for live updates:
-- `decisions` - for live decision feed
-- `events` - for activity stream
-- `conflicts` - for alert notifications
-
-### Step 6: Create Indexes
-
-Add performance indexes on:
-- `decisions(status)` - for filtering
-- `decisions(created_at)` - for timeline queries
-- `events(entity_type, entity_id)` - for entity lookups
-- `events(created_at)` - for activity feed
-- `acknowledgments(decision_id, person_id)` - for lookups
-
-### Step 7: Create Updated_at Trigger
-
-A trigger function to automatically update `updated_at` timestamps on decisions.
+| Issue | Current State | Fix Required |
+|-------|--------------|--------------|
+| AI Extraction | Returns hardcoded mock data | Call real AI via edge function |
+| Commit to Truth | Logs to console, does nothing | Save extracted entities to database |
+| Decision Ledger | Empty array, no database queries | Fetch real decisions from database |
+| Knowledge Graph Import | Button does nothing | Navigate to Ingest page |
 
 ---
 
-## Code Changes
+## Implementation Plan
 
-After the database migration, we'll update the application:
+### Part 1: Create AI Extraction Edge Function
 
-1. **Create data hooks** in `src/hooks/`:
-   - `useDecisions.ts` - CRUD operations for decisions
-   - `usePersons.ts` - People management
-   - `useProjects.ts` - Project management
-   - `useTeams.ts` - Team management
-   - `useEvents.ts` - Activity feed with realtime subscription
+Create a new edge function `extract-entities` that uses Lovable AI (Gemini) to analyze text and extract structured organizational data.
 
-2. **Update pages** to use real data:
-   - `Index.tsx` - Connect metrics and activity feed
-   - `Ledger.tsx` - Connect decision list and CRUD
-   - `Conflicts.tsx` - Connect conflict data
-   - `Propagation.tsx` - Connect acknowledgment tracking
+**What it does:**
+- Receives raw text content
+- Sends to Gemini with structured tool calling
+- Returns decisions, people, projects, stakeholders, and summary
+- Uses proper JSON schema to ensure consistent output format
 
-3. **Update Ingest page** to save extracted data to database
+**File:** `supabase/functions/extract-entities/index.ts`
+
+---
+
+### Part 2: Update Ingest Page to Use Real AI
+
+Replace the mock extraction with a real call to the new edge function:
+
+1. Remove the `mockExtractionResult` constant
+2. Update `handleProcess()` to call the `extract-entities` function
+3. Pass the `textContent` to the API
+4. Display actual AI-extracted results
+
+---
+
+### Part 3: Implement "Commit to Truth" Database Saves
+
+Update `handleCommit()` to save all extracted entities:
+
+1. Save each decision to the `decisions` table
+2. Create persons (if they don't exist by email lookup)
+3. Create projects (if they don't exist by name)
+4. Log an `events` entry for each created entity
+5. Store the raw source in the `sources` table
+6. Show success toast with count of items saved
+7. Navigate to Decision Ledger after successful commit
+
+---
+
+### Part 4: Connect Decision Ledger to Database
+
+Create a custom hook and update the Ledger page:
+
+1. **Create `useDecisions.ts` hook:**
+   - Fetch decisions with versions count
+   - Include acknowledgment stats
+   - Subscribe to realtime updates
+   - Provide loading/error states
+
+2. **Update `Ledger.tsx`:**
+   - Use the new hook instead of empty array
+   - Show loading spinner while fetching
+   - Display real decisions from database
+
+---
+
+### Part 5: Fix Knowledge Graph "Import Data" Button
+
+Make the button navigate to the Ingest page:
+
+1. Import `useNavigate` from react-router-dom
+2. Add click handler to navigate to `/ingest`
 
 ---
 
 ## Technical Details
 
-### Full Migration SQL
+### Edge Function: extract-entities
 
-The migration will include:
-- 9 enum types
-- 11 tables with proper foreign key relationships
-- RLS policies for each table
-- Realtime publication for live updates
-- Performance indexes
-- Automatic `updated_at` trigger
+```text
+Request:
+  POST /functions/v1/extract-entities
+  Body: { content: string }
 
-### Security Considerations
+Response:
+  {
+    decisions: [{ title, description, rationale }],
+    people: [{ name, role }],
+    projects: [{ name, description }],
+    suggested_stakeholders: string[],
+    summary: string
+  }
+```
 
-- RLS enabled on all tables
-- Public read access (organizational transparency)
-- Authenticated write access
-- Cascade deletes for dependent records (versions, acknowledgments)
+The function uses Gemini's tool calling feature for structured extraction, ensuring consistent JSON output rather than freeform text.
+
+### Database Insert Flow (Commit to Truth)
+
+```text
+1. Insert source record (type: 'text'/'voice'/'file')
+2. For each person:
+   - Check if exists by email pattern
+   - Insert if new, get ID
+3. For each project:
+   - Check if exists by name
+   - Insert if new, get ID
+4. For each decision:
+   - Insert with status 'draft'
+   - Create version 1 entry
+   - Log 'created' event
+5. Show success summary
+6. Navigate to /ledger
+```
+
+### Data Hook Pattern
+
+```text
+useDecisions hook:
+- useQuery for fetching with related data
+- Realtime subscription for live updates
+- Return { decisions, isLoading, error, refetch }
+```
+
+---
+
+## Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `supabase/functions/extract-entities/index.ts` | Create - AI extraction edge function |
+| `supabase/config.toml` | Modify - Register new function |
+| `src/hooks/useDecisions.ts` | Create - Database query hook |
+| `src/pages/Ingest.tsx` | Modify - Real AI + database saves |
+| `src/pages/Ledger.tsx` | Modify - Connect to database |
+| `src/pages/Graph.tsx` | Modify - Fix Import Data button |
+
+---
+
+## Expected Results
+
+After implementation:
+
+1. **Ingest Page**: "Extract with AI" analyzes your actual text and shows relevant decisions, people, and stakeholders found in the content
+2. **Commit to Truth**: Saves everything to the database and shows confirmation
+3. **Decision Ledger**: Displays all decisions from the database with search/filter
+4. **Knowledge Graph**: "Import Data" button takes you to the Ingest page
 
