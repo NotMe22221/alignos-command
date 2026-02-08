@@ -13,6 +13,7 @@ import {
   Share2,
   ArrowRight,
   Loader2,
+  Link2,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { ForceGraph } from "@/components/graph/ForceGraph";
 import { useGraphData, type GraphNode } from "@/hooks/useGraphData";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { EntityType } from "@/types/entities";
 
 const nodeColors: Record<string, string> = {
@@ -51,7 +54,35 @@ export default function Graph() {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
-  const { data: graphData, isLoading } = useGraphData();
+  const { data: graphData, isLoading, refetch } = useGraphData();
+
+  // Handle creating a new connection between nodes
+  const handleLinkCreate = async (sourceId: string, targetId: string) => {
+    try {
+      // Find the node types
+      const sourceNode = graphData?.nodes.find(n => n.id === sourceId);
+      const targetNode = graphData?.nodes.find(n => n.id === targetId);
+      
+      if (!sourceNode || !targetNode) return;
+
+      // Insert the relationship
+      const { error } = await supabase.from("relationships").insert({
+        source_id: sourceId,
+        source_type: sourceNode.type as EntityType,
+        target_id: targetId,
+        target_type: targetNode.type as EntityType,
+        relationship_type: "relates_to",
+      });
+
+      if (error) throw error;
+
+      toast.success(`Connected ${sourceNode.label} to ${targetNode.label}`);
+      refetch();
+    } catch (error) {
+      console.error("Failed to create connection:", error);
+      toast.error("Failed to create connection");
+    }
+  };
 
   // Update dimensions on resize
   useEffect(() => {
@@ -154,7 +185,23 @@ export default function Graph() {
                 width={dimensions.width}
                 height={dimensions.height}
                 onNodeClick={setSelectedNode}
+                onLinkCreate={handleLinkCreate}
               />
+
+              {/* Instructions tooltip */}
+              <div className="absolute left-4 top-4">
+                <Card className="bg-card/90 backdrop-blur">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Link2 className="h-3 w-3" />
+                      <span>Shift+drag between nodes to connect</span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Double-click canvas to reset view
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
               {/* Selected Node Info */}
               {selectedNode && (
