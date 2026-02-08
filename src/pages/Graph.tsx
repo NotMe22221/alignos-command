@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -46,6 +47,7 @@ const entityDescriptions: Record<EntityType, string> = {
 };
 
 export default function Graph() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<EntityType | "all">("all");
 
@@ -150,7 +152,7 @@ export default function Graph() {
                 </CardContent>
               </Card>
 
-              <Button className="gap-2">
+              <Button className="gap-2" onClick={() => navigate("/ingest")}>
                 Import Data
                 <ArrowRight className="h-4 w-4" />
               </Button>
