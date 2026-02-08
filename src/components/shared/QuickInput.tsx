@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 
 interface QuickInputProps {
   placeholder?: string;
+  value?: string;
+  onChange?: (value: string) => void;
   onSubmit?: (value: string) => void;
   onVoice?: () => void;
   onUpload?: () => void;
@@ -16,6 +18,8 @@ interface QuickInputProps {
 
 export function QuickInput({
   placeholder = "Ask AlignOS anything...",
+  value: controlledValue,
+  onChange,
   onSubmit,
   onVoice,
   onUpload,
@@ -23,7 +27,17 @@ export function QuickInput({
   isTranscribing = false,
   className,
 }: QuickInputProps) {
-  const [value, setValue] = useState("");
+  const [internalValue, setInternalValue] = useState("");
+  
+  // Support both controlled and uncontrolled modes
+  const value = controlledValue !== undefined ? controlledValue : internalValue;
+  const setValue = (newValue: string) => {
+    if (onChange) {
+      onChange(newValue);
+    } else {
+      setInternalValue(newValue);
+    }
+  };
   const [isFocused, setIsFocused] = useState(false);
 
   const handleSubmit = () => {

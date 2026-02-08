@@ -117,6 +117,8 @@ export default function Index() {
 
         {/* Quick Input */}
         <QuickInput
+          value={queryText}
+          onChange={setQueryText}
           onSubmit={handleAsk}
           onVoice={handleVoice}
           onUpload={handleUpload}
