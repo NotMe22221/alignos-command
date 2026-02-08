@@ -168,10 +168,9 @@ export default function Graph() {
           </div>
         </div>
 
-        {/* Graph Container */}
         <div ref={containerRef} className="relative flex-1">
           {/* Placeholder Background Pattern */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,_hsl(var(--muted))_1px,_transparent_0)] bg-[length:24px_24px] opacity-50" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,_hsl(var(--muted))_1px,_transparent_0)] bg-[length:24px_24px] opacity-50" />
 
           {isLoading ? (
             <div className="flex h-full items-center justify-center">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import type { GraphNode, GraphLink } from "@/hooks/useGraphData";
 
@@ -25,18 +25,23 @@ const nodeRadius: Record<GraphNode["type"], number> = {
   decision: 22,
 };
 
-export function ForceGraph({ 
-  nodes, 
-  links, 
-  width, 
-  height, 
+export function ForceGraph({
+  nodes,
+  links,
+  width,
+  height,
   onNodeClick,
-  onLinkCreate 
+  onLinkCreate,
 }: ForceGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [connectingFrom, setConnectingFrom] = useState<GraphNode | null>(null);
-  const dragLineRef = useRef<d3.Selection<SVGLineElement, unknown, null, undefined> | null>(null);
+
+  // Keep interaction state out of React state so D3 gestures don't trigger re-renders
+  // that would rebuild the entire SVG mid-gesture.
+  const isConnectingRef = useRef(false);
+  const connectingFromRef = useRef<GraphNode | null>(null);
+
+  const dragLineRef =
+    useRef<d3.Selection<SVGLineElement, unknown, null, undefined> | null>(null);
 
   useEffect(() => {
     if (!svgRef.current || nodes.length === 0) return;
@@ -125,61 +130,68 @@ export function ForceGraph({
       .attr("result", "coloredBlur");
 
     // Node drag behavior
-    const nodeDrag = d3.drag<SVGGElement, GraphNode>()
-      .on("start", function(event, d: any) {
-        if (event.sourceEvent.shiftKey) {
+    const nodeDrag = d3
+      .drag<SVGGElement, GraphNode>()
+      .on("start", function (event, d: any) {
+        if (event.sourceEvent?.shiftKey) {
           // Shift+drag to create connection
-          setIsConnecting(true);
-          setConnectingFrom(d);
+          isConnectingRef.current = true;
+          connectingFromRef.current = d;
           dragLine
             .attr("x1", d.x)
             .attr("y1", d.y)
             .attr("x2", d.x)
             .attr("y2", d.y)
             .attr("opacity", 1);
-        } else {
-          // Normal drag to move node
-          d3.select(this).attr("cursor", "grabbing");
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
+          return;
         }
+
+        // Normal drag to move node
+        d3.select(this).attr("cursor", "grabbing");
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
       })
-      .on("drag", function(event, d: any) {
-        if (isConnecting || event.sourceEvent.shiftKey) {
+      .on("drag", function (event, d: any) {
+        if (isConnectingRef.current || event.sourceEvent?.shiftKey) {
           // Update connection line
-          dragLine
-            .attr("x2", event.x)
-            .attr("y2", event.y);
-        } else {
-          // Move node
-          d.fx = event.x;
-          d.fy = event.y;
+          dragLine.attr("x2", event.x).attr("y2", event.y);
+          return;
         }
+
+        // Move node
+        d.fx = event.x;
+        d.fy = event.y;
       })
-      .on("end", function(event, d: any) {
+      .on("end", function (event, d: any) {
         d3.select(this).attr("cursor", "grab");
-        
-        if (isConnecting || connectingFrom) {
+
+        if (isConnectingRef.current) {
+          const connectingFrom = connectingFromRef.current;
+
           // Check if we dropped on another node
           const targetNode = nodes.find((n: any) => {
             const dx = n.x - event.x;
             const dy = n.y - event.y;
-            return Math.sqrt(dx * dx + dy * dy) < nodeRadius[n.type] && n.id !== connectingFrom?.id;
+            return (
+              Math.sqrt(dx * dx + dy * dy) < nodeRadius[n.type] &&
+              n.id !== connectingFrom?.id
+            );
           });
-          
+
           if (targetNode && connectingFrom && onLinkCreate) {
             onLinkCreate(connectingFrom.id, targetNode.id);
           }
-          
+
           dragLine.attr("opacity", 0);
-          setIsConnecting(false);
-          setConnectingFrom(null);
-        } else {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
+          isConnectingRef.current = false;
+          connectingFromRef.current = null;
+          return;
         }
+
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
       });
 
     node.call(nodeDrag as any);
@@ -271,7 +283,7 @@ export function ForceGraph({
     return () => {
       simulation.stop();
     };
-  }, [nodes, links, width, height, onNodeClick, onLinkCreate, isConnecting, connectingFrom]);
+  }, [nodes, links, width, height, onNodeClick, onLinkCreate]);
 
   return (
     <svg
