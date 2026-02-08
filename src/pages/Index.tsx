@@ -1,4 +1,6 @@
-import { motion } from "framer-motion";
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
   AlertTriangle,
@@ -8,6 +10,7 @@ import {
   TrendingUp,
   Sparkles,
   ArrowRight,
+  X,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MetricCard } from "@/components/shared/MetricCard";
@@ -15,26 +18,77 @@ import { QuickInput } from "@/components/shared/QuickInput";
 import { VoiceAgent } from "@/components/shared/VoiceAgent";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useVoiceRecording } from "@/hooks/useVoiceRecording";
+import { toast } from "sonner";
 
 export default function Index() {
+  const navigate = useNavigate();
+  const [queryText, setQueryText] = useState("");
+  const [showVoiceDialog, setShowVoiceDialog] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { isRecording, isTranscribing, toggleRecording } = useVoiceRecording({
+    onTranscriptionComplete: (text) => {
+      setQueryText(text);
+      toast.success("Voice transcribed! You can now submit your query.");
+    },
+    onError: (error) => {
+      toast.error(`Voice recording failed: ${error}`);
+    },
+  });
+
   const handleAsk = (query: string) => {
     console.log("Query:", query);
+    toast.info("AI query feature coming soon!");
     // TODO: Implement AI query
   };
 
   const handleVoice = () => {
-    console.log("Voice recording started");
-    // TODO: Implement voice recording
+    toggleRecording();
+    if (!isRecording) {
+      toast.info("Recording... Click again to stop and transcribe.");
+    }
   };
 
   const handleUpload = () => {
-    console.log("Upload triggered");
-    // TODO: Implement file upload
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Navigate to Ingest page with file context
+      toast.info(`Opening ${file.name} in Ingest...`);
+      navigate("/ingest");
+    }
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleWhatChangedToday = () => {
+    setShowVoiceDialog(true);
   };
 
   return (
     <AppLayout>
       <div className="p-8">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          accept=".txt,.md,.pdf"
+          onChange={handleFileChange}
+        />
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -50,7 +104,11 @@ export default function Index() {
                 Real-time organizational pulse
               </p>
             </div>
-            <Button variant="outline" className="gap-2">
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={handleWhatChangedToday}
+            >
               <Volume2 className="h-4 w-4" />
               What changed today?
             </Button>
@@ -62,6 +120,8 @@ export default function Index() {
           onSubmit={handleAsk}
           onVoice={handleVoice}
           onUpload={handleUpload}
+          isRecording={isRecording}
+          isTranscribing={isTranscribing}
           className="mb-8"
         />
 
@@ -119,7 +179,7 @@ export default function Index() {
                 <p className="mb-6 max-w-sm text-center text-sm text-muted-foreground">
                   Start by ingesting documents, adding decisions, or importing your organizational data.
                 </p>
-                <Button className="gap-2">
+                <Button className="gap-2" onClick={() => navigate("/ingest")}>
                   Get Started
                   <ArrowRight className="h-4 w-4" />
                 </Button>
@@ -144,6 +204,23 @@ export default function Index() {
             </CardContent>
           </Card>
         </div>
+
+        {/* What Changed Today Dialog */}
+        <Dialog open={showVoiceDialog} onOpenChange={setShowVoiceDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Volume2 className="h-5 w-5" />
+                What changed today?
+              </DialogTitle>
+            </DialogHeader>
+            <VoiceAgent 
+              onMessage={(message, isUser) => {
+                console.log(isUser ? "User:" : "Agent:", message);
+              }}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );
